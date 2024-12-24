@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "386771880792",
+    "project_id": "ceema-faiz",
+    "storage_bucket": "ceema-faiz.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:386771880792:android:22f9472e3e22be35fa732d",
+        "android_client_info": {
+          "package_name": "com.example.c"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC0JISGclEV7O5d_cq6bIxbNX4jayfT3v0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
