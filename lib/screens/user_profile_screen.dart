@@ -8,6 +8,7 @@ import '../models/friend_request.dart';
 import '../models/post.dart';
 import '../services/post_service.dart';
 import '../widgets/loading_indicator.dart';
+import 'settings_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String userId;
@@ -395,7 +396,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             IconButton(
               icon: const Icon(Icons.settings),
               onPressed: () {
-                // TODO: Navigate to settings screen
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SettingsScreen(),
+                  ),
+                );
               },
             ),
         ],
@@ -471,6 +477,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     ),
                   ),
                   const Divider(),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Posts',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          'Movie Reviews',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   _buildPostsList(),
                 ],
               ),

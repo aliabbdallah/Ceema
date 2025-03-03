@@ -1,8 +1,73 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Default rule - deny all
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
+    }
+    
+    // Posts rules
+    match /posts/{postId} {
+      allow read: if true; // Anyone can read posts
+      allow create: if request.auth != null; // Only authenticated users can create posts
+      allow update: if request.auth != null && 
+                     (request.auth.uid == resource.data.userId || // Post owner can update
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'commentCount', 'shares'])); // Anyone can update likes, commentCount, shares
+      allow delete: if request.auth != null && request.auth.uid == resource.data.userId; // Only post owner can delete
+    }
+    
+    // Watchlist items rules
+    match /watchlist_items/{itemId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId; // Only the owner can read their watchlist items
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId; // Only the owner can add to their watchlist
+      allow update: if request.auth != null && request.auth.uid == resource.data.userId; // Only the owner can update their watchlist items
+      allow delete: if request.auth != null && request.auth.uid == resource.data.userId; // Only the owner can delete their watchlist items
+    }
+    
+    // Comments rules
+    match /comments/{commentId} {
+      allow read: if true; // Anyone can read comments
+      allow create: if request.auth != null; // Only authenticated users can create comments
+      allow update: if request.auth != null && 
+                     (request.auth.uid == resource.data.userId || // Comment owner can update
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])); // Anyone can update likes
+      allow delete: if request.auth != null && request.auth.uid == resource.data.userId; // Only comment owner can delete
+    }
+    
+    // Users rules
+    match /users/{userId} {
+      allow read: if true; // Anyone can read user profiles
+      allow create, update, delete: if request.auth != null && request.auth.uid == userId; // Only the user can modify their own profile
+    }
+    
+    // Diary entries rules
+    match /diary_entries/{entryId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId; // Only the owner can read their diary entries
+      allow create, update, delete: if request.auth != null && request.auth.uid == resource.data.userId; // Only the owner can modify their diary entries
+    }
+    
+    // Friend requests rules
+    match /friend_requests/{requestId} {
+      allow read: if request.auth != null && 
+                   (request.auth.uid == resource.data.senderId || 
+                    request.auth.uid == resource.data.receiverId); // Sender and receiver can read the request
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.senderId; // Only the sender can create a request
+      allow update: if request.auth != null && 
+                     (request.auth.uid == resource.data.senderId || 
+                      request.auth.uid == resource.data.receiverId); // Sender and receiver can update the request
+      allow delete: if request.auth != null && 
+                     (request.auth.uid == resource.data.senderId || 
+                      request.auth.uid == resource.data.receiverId); // Sender and receiver can delete the request
+    }
+    
+    // Friends rules
+    match /friends/{friendId} {
+      allow read: if request.auth != null && 
+                   (request.auth.uid == resource.data.userId || 
+                    request.auth.uid == resource.data.friendId); // Both friends can read the friendship
+      allow create, update, delete: if request.auth != null && 
+                                     (request.auth.uid == resource.data.userId || 
+                                      request.auth.uid == resource.data.friendId); // Both friends can modify the friendship
     }
   }
 }

@@ -14,7 +14,8 @@ class Post {
   final DateTime createdAt;
   final List<String> likes;
   final int commentCount;
-  final int rating;
+  final List<String> shares;
+  final double rating;
 
   Post({
     required this.id,
@@ -30,7 +31,8 @@ class Post {
     required this.createdAt,
     required this.likes,
     required this.commentCount,
-    this.rating = 0,
+    required this.shares,
+    this.rating = 0.0,
   });
 
   Map<String, dynamic> toJson() {
@@ -47,6 +49,7 @@ class Post {
       'createdAt': Timestamp.fromDate(createdAt),
       'likes': likes,
       'commentCount': commentCount,
+      'shares': shares,
       'rating': rating,
     };
   }
@@ -73,6 +76,7 @@ class Post {
       createdAt: createdAtDate,
       likes: List<String>.from(json['likes'] ?? []),
       commentCount: json['commentCount'] ?? 0,
+      shares: List<String>.from(json['shares'] ?? []),
       rating: json['rating'] ?? 0,
     );
   }

@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../models/movie.dart';
 import '../models/diary_entry.dart';
-
+import '../widgets/star_rating.dart';
 import '../services/diary_service.dart';
 
 class DiaryEntryForm extends StatefulWidget {
@@ -68,6 +68,31 @@ class _DiaryEntryFormState extends State<DiaryEntryForm> {
     }
   }
 
+  String _getRatingDescription(double rating) {
+    if (rating == 5.0) return 'Masterpiece!';
+    if (rating >= 4.5) return 'Exceptional!';
+    if (rating >= 4.0) return 'Loved it!';
+    if (rating >= 3.5) return 'Really good!';
+    if (rating >= 3.0) return 'Liked it';
+    if (rating >= 2.5) return 'Decent';
+    if (rating >= 2.0) return 'It was OK';
+    if (rating >= 1.5) return 'Mediocre';
+    if (rating >= 1.0) return 'Not for me';
+    if (rating >= 0.5) return 'Poor';
+    return '';
+  }
+
+  Color _getRatingColor(double rating) {
+    if (rating >= 4.5) return Colors.green[800]!;
+    if (rating >= 4.0) return Colors.green;
+    if (rating >= 3.5) return Colors.green[300]!;
+    if (rating >= 3.0) return Colors.blue;
+    if (rating >= 2.5) return Colors.blue[300]!;
+    if (rating >= 2.0) return Colors.orange;
+    if (rating >= 1.5) return Colors.orange[300]!;
+    return Colors.red[700]!;
+  }
+
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -129,25 +154,30 @@ class _DiaryEntryFormState extends State<DiaryEntryForm> {
   }
 
   Widget _buildRatingSelector() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(5, (index) {
-        return GestureDetector(
-          onTap: () {
+    return Column(
+      children: [
+        StarRating(
+          rating: _rating,
+          size: 40,
+          spacing: 8,
+          allowHalfRating: true,
+          onRatingChanged: (rating) {
             setState(() {
-              _rating = index + 1;
+              _rating = rating;
             });
           },
-          child: Container(
-            padding: const EdgeInsets.all(4),
-            child: Icon(
-              index < _rating ? Icons.star : Icons.star_border,
-              color: Colors.amber,
-              size: 32,
+        ),
+        const SizedBox(height: 12),
+        if (_rating > 0)
+          Text(
+            _getRatingDescription(_rating),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: _getRatingColor(_rating),
             ),
           ),
-        );
-      }),
+      ],
     );
   }
 

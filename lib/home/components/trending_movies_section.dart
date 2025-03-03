@@ -1,9 +1,7 @@
-// home/components/trending_movies_section.dart
 import 'package:flutter/material.dart';
 import '../../models/movie.dart';
 import '../../services/tmdb_service.dart';
 import '../../screens/movie_details_screen.dart';
-// import '../../screens/all_trending_movies_screen.dart';
 
 class TrendingMoviesSection extends StatefulWidget {
   const TrendingMoviesSection({Key? key}) : super(key: key);
@@ -12,11 +10,15 @@ class TrendingMoviesSection extends StatefulWidget {
   _TrendingMoviesSectionState createState() => _TrendingMoviesSectionState();
 }
 
-class _TrendingMoviesSectionState extends State<TrendingMoviesSection> {
+class _TrendingMoviesSectionState extends State<TrendingMoviesSection>
+    with AutomaticKeepAliveClientMixin {
   List<Movie> _trendingMovies = [];
   bool _isLoading = true;
   String? _errorMessage;
   final ScrollController _scrollController = ScrollController();
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -57,113 +59,149 @@ class _TrendingMoviesSectionState extends State<TrendingMoviesSection> {
     }
   }
 
-  Widget _buildMovieCard(Movie movie) {
-    return GestureDetector(
-      onTap: () => _navigateToMovieDetails(movie),
-      child: Container(
-        width: 120,
-        margin: const EdgeInsets.only(right: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Movie Poster
-            Hero(
-              tag: 'movie-poster-${movie.id}',
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Stack(
+  Widget _buildMovieCard(Movie movie, int index) {
+    return Hero(
+      tag: 'movie-${movie.id}',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _navigateToMovieDetails(movie),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: 130,
+            margin: EdgeInsets.only(
+              right: 12,
+              left: index == 0 ? 0 : 0,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Stack(
                   children: [
-                    Image.network(
-                      movie.posterUrl,
-                      height: 200,
-                      width: 120,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          height: 200,
-                          width: 120,
-                          color: Colors.grey[800],
-                          child: const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.movie,
-                                color: Colors.white54,
-                                size: 32,
+                    // Movie Poster with shadow
+                    Container(
+                      height: 190,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          movie.posterUrl,
+                          height: 190,
+                          width: 130,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              height: 190,
+                              width: 130,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceVariant,
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              SizedBox(height: 4),
-                              Text(
-                                'No Poster',
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 12,
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  value: loadingProgress.expectedTotalBytes !=
+                                          null
+                                      ? loadingProgress.cumulativeBytesLoaded /
+                                          loadingProgress.expectedTotalBytes!
+                                      : null,
+                                  strokeWidth: 2,
                                 ),
                               ),
-                            ],
-                          ),
-                        );
-                      },
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(
-                          height: 180,
-                          width: 120,
-                          color: Colors.grey[200],
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              value: loadingProgress.expectedTotalBytes != null
-                                  ? loadingProgress.cumulativeBytesLoaded /
-                                      loadingProgress.expectedTotalBytes!
-                                  : null,
-                            ),
-                          ),
-                        );
-                      },
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              height: 190,
+                              width: 130,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceVariant,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Center(
+                                child: Icon(Icons.movie,
+                                    size: 40, color: Colors.white70),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                     ),
-                    // Gradient overlay for better text visibility
+                    // Rating badge
                     Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      height: 60,
+                      top: 8,
+                      right: 8,
                       child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.bottomCenter,
-                            end: Alignment.topCenter,
-                            colors: [
-                              Colors.black.withOpacity(0.7),
-                              Colors.transparent,
-                            ],
-                          ),
+                          color: Colors.black.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.star,
+                              color: Colors.amber,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              '8.5', // This would ideally come from the movie data
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ],
                 ),
-              ),
+                // Title and year with limited height
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        movie.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        movie.year,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            // Movie Title
-            Text(
-              movie.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 2),
-            // Release Year
-            Text(
-              movie.year,
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -178,137 +216,115 @@ class _TrendingMoviesSectionState extends State<TrendingMoviesSection> {
     );
   }
 
-  Widget _buildErrorView() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.error_outline,
-            size: 48,
-            color: Theme.of(context).colorScheme.error,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _errorMessage ?? 'An error occurred',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.error,
-            ),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: _loadTrendingMovies,
-            child: const Text('Retry'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoadingView() {
-    return Container(
-      height: 180,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: 5, // Show 5 shimmer loading cards
-        itemBuilder: (context, index) {
-          return Container(
-            width: 120,
-            margin: const EdgeInsets.only(right: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  height: 180,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  height: 16,
-                  width: double.infinity,
-                  color: Colors.grey[300],
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  height: 12,
-                  width: 80,
-                  color: Colors.grey[300],
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+
     if (_errorMessage != null) {
       return _buildErrorView();
     }
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Trending Movies',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.trending_up,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Trending Movies',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
-                TextButton(
+                TextButton.icon(
                   onPressed: () {
-                    // Navigator.push(
-                    //   context,
-                    //   MaterialPageRoute(
-                    //     builder: (context) => const AllTrendingMoviesScreen(),
-                    //   ),
-                    // );
+                    // Navigate to see all trending movies
                   },
-                  child: const Text('See all'),
+                  icon: const Icon(Icons.arrow_forward, size: 16),
+                  label: const Text('See all'),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 36),
+                  ),
                 ),
               ],
             ),
           ),
           if (_isLoading)
-            _buildLoadingView()
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24.0),
+                child: CircularProgressIndicator(),
+              ),
+            )
           else
             SizedBox(
-              height: 240,
+              height: 260, // Fixed height container to avoid overflow
               child: ListView.builder(
                 controller: _scrollController,
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 itemCount: _trendingMovies.length,
                 itemBuilder: (context, index) =>
-                    _buildMovieCard(_trendingMovies[index]),
+                    _buildMovieCard(_trendingMovies[index], index),
               ),
             ),
-          const SizedBox(height: 16),
         ],
       ),
     );
   }
-}
 
-// Add these scroll transitions for smoother scrolling
-class SmoothScrollBehavior extends ScrollBehavior {
-  @override
-  ScrollPhysics getScrollPhysics(BuildContext context) {
-    return const BouncingScrollPhysics();
+  Widget _buildErrorView() {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 48,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _errorMessage ?? 'An error occurred',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _loadTrendingMovies,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

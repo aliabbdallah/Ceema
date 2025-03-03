@@ -1,10 +1,14 @@
+// home/components/profile_screen.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/post.dart';
 import '../services/post_service.dart';
+import '../services/profile_service.dart';
+import '../models/post.dart';
+import '../models/user.dart';
 import 'profile_edit_screen.dart';
 import '../screens/friends_screen.dart';
+import 'settings_screen.dart';
+import '../screens/watchlist_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -15,133 +19,57 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final PostService _postService = PostService();
+  final ProfileService _profileService = ProfileService();
 
-  Future<Map<String, dynamic>> _getUserData() async {
-    try {
-      final userDoc = await _firestore
-          .collection('users')
-          .doc(_auth.currentUser!.uid)
-          .get();
-
-      // Get follower and following counts
-      final followersCount = await _firestore
-          .collection('friends')
-          .where('friendId', isEqualTo: _auth.currentUser!.uid)
-          .count()
-          .get();
-
-      final followingCount = await _firestore
-          .collection('friends')
-          .where('userId', isEqualTo: _auth.currentUser!.uid)
-          .count()
-          .get();
-
-      // Get post count
-      final postsCount = await _firestore
-          .collection('posts')
-          .where('userId', isEqualTo: _auth.currentUser!.uid)
-          .count()
-          .get();
-
-      if (!userDoc.exists) {
-        throw Exception('User document not found');
-      }
-
-      final userData = userDoc.data()!;
-      return {
-        ...userData,
-        'followersCount': followersCount.count ?? 0,
-        'followingCount': followingCount.count ?? 0,
-        'postsCount': postsCount.count ?? 0,
-      };
-    } catch (e) {
-      print('Error getting user data: $e');
-      rethrow;
-    }
-  }
-
-  Widget _buildProfileHeader(Map<String, dynamic> userData) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: 50,
-            backgroundImage: NetworkImage(userData['profileImageUrl'] ??
-                'https://ui-avatars.com/api/?name=${userData['username']}&size=200'),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            userData['username'] ?? 'User',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          if (userData['bio'] != null && userData['bio'].toString().isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 32),
-              child: Text(
-                userData['bio'],
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-              ),
-            ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildStatItem('Posts', userData['postsCount'] ?? 0),
-              GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => FriendsScreen(
-                      userId: _auth.currentUser!.uid,
-                      initialTabIndex: 0,
-                    ),
-                  ),
-                ),
-                child: _buildStatItem(
-                    'Following', userData['followingCount'] ?? 0),
-              ),
-              GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => FriendsScreen(
-                      userId: _auth.currentUser!.uid,
-                      initialTabIndex: 1,
-                    ),
-                  ),
-                ),
-                child: _buildStatItem(
-                    'Followers', userData['followersCount'] ?? 0),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          OutlinedButton(
-            onPressed: () {
-              Navigator.push(
+  Widget _buildProfileStats(UserModel user) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            InkWell(
+              onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const ProfileEditScreen(),
+                  builder: (context) => FriendsScreen(
+                    userId: _auth.currentUser!.uid,
+                    initialTabIndex: 0,
+                  ),
                 ),
-              );
-            },
-            style: OutlinedButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: _buildStatItem('Following', user.followingCount),
             ),
-            child: const Text('Edit Profile'),
-          ),
-        ],
+            InkWell(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => FriendsScreen(
+                    userId: _auth.currentUser!.uid,
+                    initialTabIndex: 1,
+                  ),
+                ),
+              ),
+              child: _buildStatItem('Followers', user.followersCount),
+            ),
+            InkWell(
+              onTap: () {
+                // Navigate to the watchlist screen directly
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const WatchlistScreen(),
+                  ),
+                );
+              },
+              child: _buildStatItem('Watchlist', user.watchlistCount),
+            ),
+            _buildStatItem(
+                'Movies', 0), // Replace with actual movie count later
+          ],
+        ),
       ),
     );
   }
@@ -151,15 +79,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       children: [
         Text(
           count.toString(),
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         Text(
           label,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[600],
-              ),
+          style: const TextStyle(
+            color: Colors.grey,
+          ),
         ),
       ],
     );
@@ -190,13 +119,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   color: Colors.grey[400],
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  'No posts yet',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 16,
-                  ),
-                ),
+                const Text('No posts yet'),
               ],
             ),
           );
@@ -217,9 +140,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     Row(
                       children: [
-                        CircleAvatar(
-                          backgroundImage: NetworkImage(post.userAvatar),
-                          radius: 20,
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: Image.network(
+                            post.moviePosterUrl,
+                            width: 40,
+                            height: 60,
+                            fit: BoxFit.cover,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -227,16 +155,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                post.userName,
+                                post.movieTitle,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                               Text(
-                                post.movieTitle,
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 14,
+                                post.movieYear,
+                                style: const TextStyle(
+                                  color: Colors.grey,
                                 ),
                               ),
                             ],
@@ -244,10 +171,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Text(post.content),
+                    const SizedBox(height: 8),
                     if (post.rating > 0) ...[
-                      const SizedBox(height: 8),
                       Row(
                         children: List.generate(5, (index) {
                           return Icon(
@@ -259,7 +184,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           );
                         }),
                       ),
+                      const SizedBox(height: 8),
                     ],
+                    Text(post.content),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.favorite,
+                          size: 16,
+                          color: post.likes.contains(_auth.currentUser?.uid)
+                              ? Colors.red
+                              : Colors.grey,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(post.likes.length.toString()),
+                        const SizedBox(width: 16),
+                        const Icon(
+                          Icons.comment_outlined,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(post.commentCount.toString()),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -273,35 +221,116 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: _getUserData(),
+      body: StreamBuilder<UserModel>(
+        stream: _profileService.getUserProfileStream(_auth.currentUser!.uid),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(
-              child: Text('Error: ${snapshot.error}'),
-            );
+            return Center(child: Text('Error: ${snapshot.error}'));
           }
 
           if (!snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
+            return const Center(child: CircularProgressIndicator());
           }
 
-          return RefreshIndicator(
-            onRefresh: () async {
-              setState(() {});
-            },
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Column(
-                children: [
-                  _buildProfileHeader(snapshot.data!),
-                  const Divider(height: 1),
-                  _buildPostList(),
+          final user = snapshot.data!;
+
+          return CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                expandedHeight: 200,
+                floating: false,
+                pinned: true,
+                flexibleSpace: FlexibleSpaceBar(
+                  title: Text(user.username),
+                  background: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Theme.of(context).colorScheme.primary,
+                          Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withOpacity(0.7),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ProfileEditScreen(),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.settings),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SettingsScreen(),
+                      ),
+                    ),
+                  ),
                 ],
               ),
-            ),
+              SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    const SizedBox(height: 16),
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundImage: NetworkImage(
+                        user.profileImageUrl ??
+                            'https://ui-avatars.com/api/?name=${user.username}',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (user.bio != null && user.bio!.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Text(
+                          user.bio!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    _buildProfileStats(user),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        children: [
+                          const Text(
+                            'My Posts',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            'Movie Reviews',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildPostList(),
+                  ],
+                ),
+              ),
+            ],
           );
         },
       ),

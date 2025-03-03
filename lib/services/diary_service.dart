@@ -1,9 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/diary_entry.dart';
 import '../models/movie.dart';
+import 'post_service.dart';
 
 class DiaryService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final PostService _postService = PostService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // Create a new diary entry
   Future<void> addDiaryEntry({
@@ -15,6 +19,7 @@ class DiaryService {
     required bool isFavorite,
     required bool isRewatch,
   }) async {
+    // Add diary entry
     await _firestore.collection('diary_entries').add({
       'userId': userId,
       'movieId': movie.id,
@@ -28,6 +33,26 @@ class DiaryService {
       'isRewatch': isRewatch,
       'createdAt': FieldValue.serverTimestamp(),
     });
+
+    // Create a post about the diary entry if rating is provided
+    if (rating > 0) {
+      final user = _auth.currentUser;
+      if (user != null) {
+        String content = review.isNotEmpty
+            ? review
+            : 'I watched ${movie.title} and rated it ${rating % 1 == 0 ? rating.toInt() : rating} stars!';
+
+        await _postService.createPost(
+          userId: user.uid,
+          userName: user.displayName ?? 'User',
+          userAvatar: user.photoURL ??
+              'https://ui-avatars.com/api/?name=${user.displayName ?? "User"}',
+          content: content,
+          movie: movie,
+          rating: rating,
+        );
+      }
+    }
   }
 
   // Get all diary entries for a user
@@ -53,6 +78,19 @@ class DiaryService {
     bool? isFavorite,
     bool? isRewatch,
   }) async {
+    // Get the current diary entry
+    final diaryDoc =
+        await _firestore.collection('diary_entries').doc(entryId).get();
+
+    if (!diaryDoc.exists) {
+      throw Exception('Diary entry not found');
+    }
+
+    final diaryData = diaryDoc.data()!;
+    final userId = diaryData['userId'] as String;
+    final movieId = diaryData['movieId'] as String;
+
+    // Update diary entry
     final Map<String, dynamic> updates = {};
     if (rating != null) updates['rating'] = rating;
     if (review != null) updates['review'] = review;
@@ -63,6 +101,24 @@ class DiaryService {
     if (isRewatch != null) updates['isRewatch'] = isRewatch;
 
     await _firestore.collection('diary_entries').doc(entryId).update(updates);
+
+    // If rating was updated, find and update associated post
+    if (rating != null) {
+      // Find posts for this movie by this user
+      final postsQuery = await _firestore
+          .collection('posts')
+          .where('userId', isEqualTo: userId)
+          .where('movieId', isEqualTo: movieId)
+          .get();
+
+      if (postsQuery.docs.isNotEmpty) {
+        // Update the most recent post with the new rating
+        final postId = postsQuery.docs.first.id;
+        await _firestore.collection('posts').doc(postId).update({
+          'rating': rating,
+        });
+      }
+    }
   }
 
   // Delete a diary entry

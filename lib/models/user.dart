@@ -11,6 +11,8 @@ class UserModel {
   final int followersCount;
   final int followingCount;
   final int mutualFriendsCount;
+  final int watchlistCount;
+  final bool emailVerified;
 
   UserModel({
     required this.id,
@@ -23,6 +25,8 @@ class UserModel {
     this.followersCount = 0,
     this.followingCount = 0,
     this.mutualFriendsCount = 0,
+    this.watchlistCount = 0,
+    this.emailVerified = false,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json, String documentId) {
@@ -37,6 +41,8 @@ class UserModel {
       followersCount: json['followersCount'] ?? 0,
       followingCount: json['followingCount'] ?? 0,
       mutualFriendsCount: json['mutualFriendsCount'] ?? 0,
+      watchlistCount: json['watchlistCount'] ?? 0,
+      emailVerified: json['emailVerified'] ?? false,
     );
   }
 
@@ -51,6 +57,8 @@ class UserModel {
       'followersCount': followersCount,
       'followingCount': followingCount,
       'mutualFriendsCount': mutualFriendsCount,
+      'watchlistCount': watchlistCount,
+      'emailVerified': emailVerified,
     };
   }
 
@@ -64,6 +72,8 @@ class UserModel {
     int? followersCount,
     int? followingCount,
     int? mutualFriendsCount,
+    int? watchlistCount,
+    bool? emailVerified,
   }) {
     return UserModel(
       id: id,
@@ -76,6 +86,8 @@ class UserModel {
       followersCount: followersCount ?? this.followersCount,
       followingCount: followingCount ?? this.followingCount,
       mutualFriendsCount: mutualFriendsCount ?? this.mutualFriendsCount,
+      watchlistCount: watchlistCount ?? this.watchlistCount,
+      emailVerified: emailVerified ?? this.emailVerified,
     );
   }
 }

@@ -7,6 +7,8 @@ import '../../models/movie.dart';
 import '../../services/post_service.dart';
 import '../../screens/user_profile_screen.dart';
 import '../../screens/movie_details_screen.dart';
+import '../../screens/comments_screen.dart';
+import '../../widgets/star_rating.dart';
 
 class PostCard extends StatefulWidget {
   final Post post;
@@ -24,11 +26,13 @@ class _PostCardState extends State<PostCard> {
   final PostService _postService = PostService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   bool _isLiked = false;
+  bool _isShared = false;
 
   @override
   void initState() {
     super.initState();
     _isLiked = widget.post.likes.contains(_auth.currentUser?.uid);
+    _isShared = widget.post.shares.contains(_auth.currentUser?.uid);
   }
 
   Future<void> _handleLike() async {
@@ -42,6 +46,33 @@ class _PostCardState extends State<PostCard> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error updating like: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleShare() async {
+    try {
+      await _postService.sharePost(widget.post.id, _auth.currentUser!.uid);
+      setState(() {
+        _isShared = true;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Post shared successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sharing post: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -111,8 +142,8 @@ class _PostCardState extends State<PostCard> {
             leading: const Icon(Icons.share),
             title: const Text('Share Post'),
             onTap: () {
-              // TODO: Implement share functionality
               Navigator.pop(context);
+              _handleShare();
             },
           ),
           ListTile(
@@ -240,16 +271,11 @@ class _PostCardState extends State<PostCard> {
                   ),
                   if (widget.post.rating > 0) ...[
                     const SizedBox(height: 8),
-                    Row(
-                      children: List.generate(5, (index) {
-                        return Icon(
-                          index < widget.post.rating
-                              ? Icons.star
-                              : Icons.star_border,
-                          color: Colors.amber,
-                          size: 16,
-                        );
-                      }),
+                    StarRating(
+                      rating: widget.post.rating.toDouble(),
+                      size: 16,
+                      spacing: 2,
+                      readOnly: true,
                     ),
                   ],
                 ],
@@ -276,17 +302,24 @@ class _PostCardState extends State<PostCard> {
         IconButton(
           icon: const Icon(Icons.comment_outlined),
           onPressed: () {
-            // TODO: Implement comments
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => CommentsScreen(post: widget.post),
+              ),
+            );
           },
         ),
         Text(widget.post.commentCount.toString()),
         const Spacer(),
         IconButton(
-          icon: const Icon(Icons.share_outlined),
-          onPressed: () {
-            // TODO: Implement share functionality
-          },
+          icon: Icon(
+            Icons.share_outlined,
+            color: _isShared ? Colors.blue : null,
+          ),
+          onPressed: _handleShare,
         ),
+        Text(widget.post.shares.length.toString()),
       ],
     );
   }

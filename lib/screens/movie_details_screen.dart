@@ -4,6 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/movie.dart';
 import '../services/tmdb_service.dart';
+import '../services/watchlist_service.dart';
+import '../services/diary_service.dart';
+import '../widgets/star_rating.dart';
+import 'diary_entry_form.dart';
 // import '../widgets/loading_indicator.dart';
 
 class MovieDetailsScreen extends StatefulWidget {
@@ -18,20 +22,115 @@ class MovieDetailsScreen extends StatefulWidget {
   _MovieDetailsScreenState createState() => _MovieDetailsScreenState();
 }
 
-class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
+class _MovieDetailsScreenState extends State<MovieDetailsScreen>
+    with SingleTickerProviderStateMixin {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final WatchlistService _watchlistService = WatchlistService();
+  final DiaryService _diaryService = DiaryService();
 
   bool _isLoading = true;
   bool _isInWatchlist = false;
+  double _userRating = 0.0;
+  bool _hasRated = false;
   Map<String, dynamic>? _movieDetails;
   List<Map<String, dynamic>> _similarMovies = [];
+  late AnimationController _ratingAnimationController;
 
   @override
   void initState() {
     super.initState();
+    _ratingAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
     _loadMovieDetails();
     _checkWatchlistStatus();
+    _checkUserRating();
+  }
+
+  @override
+  void dispose() {
+    _ratingAnimationController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _checkUserRating() async {
+    try {
+      // Check if user has already rated this movie in their diary
+      final querySnapshot = await _firestore
+          .collection('diary_entries')
+          .where('userId', isEqualTo: _auth.currentUser!.uid)
+          .where('movieId', isEqualTo: widget.movie.id)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        final data = querySnapshot.docs.first.data();
+        if (mounted) {
+          setState(() {
+            _userRating = (data['rating'] ?? 0).toDouble();
+            _hasRated = _userRating > 0;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error checking user rating: $e');
+    }
+  }
+
+  Future<void> _saveRating(double rating) async {
+    setState(() {
+      _userRating = rating;
+      _hasRated = true;
+    });
+
+    try {
+      // Check if user already has a diary entry for this movie
+      final querySnapshot = await _firestore
+          .collection('diary_entries')
+          .where('userId', isEqualTo: _auth.currentUser!.uid)
+          .where('movieId', isEqualTo: widget.movie.id)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isNotEmpty) {
+        // Update existing entry
+        await _diaryService.updateDiaryEntry(
+          querySnapshot.docs.first.id,
+          rating: rating,
+        );
+      } else {
+        // Create a new diary entry with just the rating
+        await _diaryService.addDiaryEntry(
+          userId: _auth.currentUser!.uid,
+          movie: widget.movie,
+          rating: rating,
+          review: '',
+          watchedDate: DateTime.now(),
+          isFavorite: false,
+          isRewatch: false,
+        );
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Rating saved!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving rating: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _loadMovieDetails() async {
@@ -81,19 +180,26 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
 
   Future<void> _toggleWatchlist() async {
     try {
-      final docRef =
-          _firestore.collection('watchlists').doc(_auth.currentUser!.uid);
-
       if (_isInWatchlist) {
-        // Remove from watchlist
-        await docRef.update({
-          'movies': FieldValue.arrayRemove([widget.movie.toJson()])
-        });
+        // Get the watchlist item ID first
+        final querySnapshot = await _firestore
+            .collection('watchlist_items')
+            .where('userId', isEqualTo: _auth.currentUser!.uid)
+            .where('movie.id', isEqualTo: widget.movie.id)
+            .limit(1)
+            .get();
+
+        if (querySnapshot.docs.isNotEmpty) {
+          await _watchlistService.removeFromWatchlist(
+            querySnapshot.docs.first.id,
+            _auth.currentUser!.uid,
+          );
+        }
       } else {
-        // Add to watchlist
-        await docRef.set({
-          'movies': FieldValue.arrayUnion([widget.movie.toJson()])
-        }, SetOptions(merge: true));
+        await _watchlistService.addToWatchlist(
+          userId: _auth.currentUser!.uid,
+          movie: widget.movie,
+        );
       }
 
       setState(() {
@@ -120,6 +226,87 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
         );
       }
     }
+  }
+
+  Widget _buildRatingSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Your Rating',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              if (_hasRated)
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => DiaryEntryForm(
+                          movie: widget.movie,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('Add Review'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: StarRating(
+              rating: _userRating,
+              size: 36,
+              allowHalfRating: true,
+              spacing: 8,
+              onRatingChanged: (rating) {
+                _saveRating(rating);
+                _ratingAnimationController.forward(from: 0.0);
+              },
+            ),
+          ),
+          if (_hasRated) ...[
+            const SizedBox(height: 16),
+            Center(
+              child: Text(
+                _userRating == 5
+                    ? 'Masterpiece!'
+                    : _userRating >= 4
+                        ? 'Loved it!'
+                        : _userRating >= 3
+                            ? 'Liked it'
+                            : _userRating >= 2
+                                ? 'It was OK'
+                                : 'Not for me',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: _userRating >= 4
+                      ? Colors.green
+                      : _userRating >= 3
+                          ? Colors.blue
+                          : _userRating >= 2
+                              ? Colors.orange
+                              : Colors.red[700],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _buildHeader() {
@@ -353,11 +540,29 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
           children: [
             _buildHeader(),
             _buildMovieInfo(),
+            _buildRatingSection(),
             _buildOverview(),
             _buildSimilarMovies(),
             const SizedBox(height: 24),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DiaryEntryForm(
+                movie: widget.movie,
+                existingEntry: _hasRated
+                    ? null
+                    : null, // TODO: Get existing entry if available
+              ),
+            ),
+          );
+        },
+        child: const Icon(Icons.edit),
+        tooltip: 'Add to diary',
       ),
     );
   }

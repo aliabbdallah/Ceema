@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ceema/screens/sign_up_screen.dart';
 import 'package:ceema/home/screens/home_screen.dart';
 import 'package:ceema/screens/forgot_password_screen.dart';
@@ -45,12 +46,79 @@ class _SignInScreenState extends State<SignInScreen> {
       );
 
       if (mounted && userCredential.user != null) {
-        // Successfully signed in
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => const HomeScreen(),
-          ),
-        );
+        // Check if email is verified
+        if (!userCredential.user!.emailVerified) {
+          // Update the Firestore document to reflect the current verification status
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userCredential.user!.uid)
+              .update({'emailVerified': false});
+
+          // Sign out the user since email is not verified
+          await _auth.signOut();
+
+          // Show a message about email verification requirement
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Email verification required. Please verify your email before signing in.',
+              ),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Resend',
+                onPressed: () async {
+                  try {
+                    // Sign in again temporarily to send verification email
+                    final tempCredential =
+                        await _auth.signInWithEmailAndPassword(
+                      email: _emailController.text.trim(),
+                      password: _passwordController.text,
+                    );
+
+                    await tempCredential.user!.sendEmailVerification();
+                    await _auth.signOut(); // Sign out again
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            'Verification email sent! Please check your inbox.'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error sending email: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                },
+              ),
+            ),
+          );
+
+          // Set loading to false since we're staying on the sign-in screen
+          setState(() {
+            _isLoading = false;
+          });
+
+          return; // Stop here, don't proceed to home screen
+        } else {
+          // If email is verified, update the Firestore document
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userCredential.user!.uid)
+              .update({'emailVerified': true});
+
+          // Successfully signed in
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const HomeScreen(),
+            ),
+          );
+        }
       }
     } on FirebaseAuthException catch (e) {
       String errorMessage;

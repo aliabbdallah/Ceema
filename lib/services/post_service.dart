@@ -11,7 +11,7 @@ class PostService {
     required String userAvatar,
     required String content,
     required Movie movie,
-    int rating = 0,
+    double rating = 0.0,
   }) async {
     await _firestore.collection('posts').add({
       'userId': userId,
@@ -26,6 +26,7 @@ class PostService {
       'createdAt': FieldValue.serverTimestamp(),
       'likes': [],
       'commentCount': 0,
+      'shares': [],
       'rating': rating,
     });
   }
@@ -77,6 +78,91 @@ class PostService {
         });
       }
     }
+  }
+
+  // Share a post
+  Future<void> sharePost(String postId, String userId) async {
+    final postRef = _firestore.collection('posts').doc(postId);
+    final post = await postRef.get();
+
+    if (post.exists) {
+      await postRef.update({
+        'shares': FieldValue.arrayUnion([userId])
+      });
+    }
+  }
+
+  // Add a comment to a post
+  Future<void> addComment({
+    required String postId,
+    required String userId,
+    required String userName,
+    required String userAvatar,
+    required String content,
+  }) async {
+    // Create a new comment
+    await _firestore.collection('comments').add({
+      'postId': postId,
+      'userId': userId,
+      'userName': userName,
+      'userAvatar': userAvatar,
+      'content': content,
+      'createdAt': FieldValue.serverTimestamp(),
+      'likes': [],
+    });
+
+    // Update the comment count on the post
+    await _firestore.collection('posts').doc(postId).update({
+      'commentCount': FieldValue.increment(1),
+    });
+  }
+
+  // Get comments for a post
+  Stream<List<Map<String, dynamic>>> getComments(String postId) {
+    return _firestore
+        .collection('comments')
+        .where('postId', isEqualTo: postId)
+        .orderBy('createdAt', descending: false)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return data;
+      }).toList();
+    });
+  }
+
+  // Toggle like on a comment
+  Future<void> toggleCommentLike(String commentId, String userId) async {
+    final commentRef = _firestore.collection('comments').doc(commentId);
+    final comment = await commentRef.get();
+
+    if (comment.exists) {
+      final likes = List<String>.from(comment.data()?['likes'] ?? []);
+
+      if (likes.contains(userId)) {
+        // Unlike
+        await commentRef.update({
+          'likes': FieldValue.arrayRemove([userId])
+        });
+      } else {
+        // Like
+        await commentRef.update({
+          'likes': FieldValue.arrayUnion([userId])
+        });
+      }
+    }
+  }
+
+  // Delete a comment
+  Future<void> deleteComment(String commentId, String postId) async {
+    await _firestore.collection('comments').doc(commentId).delete();
+
+    // Update the comment count on the post
+    await _firestore.collection('posts').doc(postId).update({
+      'commentCount': FieldValue.increment(-1),
+    });
   }
 
   // Delete a post

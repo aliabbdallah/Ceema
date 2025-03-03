@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/movie.dart';
 import '../../services/post_service.dart';
 import '../../widgets/movie_selection_dialog.dart';
+import '../../widgets/star_rating.dart';
 
 class ComposePostSection extends StatefulWidget {
   final VoidCallback onCancel;
@@ -26,7 +27,7 @@ class _ComposePostSectionState extends State<ComposePostSection> {
   final FocusNode _focusNode = FocusNode();
 
   Movie? _selectedMovie;
-  int _rating = 0;
+  double _rating = 0.0;
   bool _isLoading = false;
   bool _showEmojiPicker = false;
   double _textFieldHeight = 100;
@@ -205,16 +206,17 @@ class _ComposePostSectionState extends State<ComposePostSection> {
           'Rating: ',
           style: TextStyle(fontSize: 14),
         ),
-        ...List.generate(5, (index) {
-          return GestureDetector(
-            onTap: () => setState(() => _rating = index + 1),
-            child: Icon(
-              index < _rating ? Icons.star : Icons.star_border,
-              color: Colors.amber,
-              size: 24,
-            ),
-          );
-        }),
+        StarRating(
+          rating: _rating.toDouble(),
+          size: 24,
+          spacing: 4,
+          allowHalfRating: false,
+          onRatingChanged: (rating) {
+            setState(() {
+              _rating = rating;
+            });
+          },
+        ),
       ],
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ceema/home/screens/home_screen.dart';
+import 'package:ceema/screens/sign_in_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({Key? key}) : super(key: key);
@@ -64,6 +65,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       // If user creation is successful, store additional user data in Firestore
       if (userCredential.user != null) {
+        // Send email verification
+        await userCredential.user!.sendEmailVerification();
+
         await _firestore.collection('users').doc(userCredential.user!.uid).set({
           'username': _usernameController.text.trim(),
           'email': _emailController.text.trim(),
@@ -74,26 +78,87 @@ class _SignUpScreenState extends State<SignUpScreen> {
           'followersCount': 0,
           'followingCount': 0,
           'mutualFriendsCount': 0,
+          'emailVerified': false,
         });
 
         // Update the user's display name
         await userCredential.user!
             .updateDisplayName(_nameController.text.trim());
 
-        // Show success message
+        // Show success message with verification info
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Account created successfully!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-
-          // Navigate to the home screen
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => const HomeScreen(),
-            ),
+          // Show a dialog explaining the verification requirement
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                title: const Text('Email Verification Required'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'We\'ve sent a verification link to your email address. You must verify your email before you can sign in.',
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Please check your inbox and spam folder.',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Icon(Icons.info_outline,
+                            color: Colors.blue, size: 16),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'You will be redirected to the sign-in screen.',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      // Navigate to the sign-in screen
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (context) => const SignInScreen(),
+                        ),
+                        (route) => false,
+                      );
+                    },
+                    child: const Text('OK'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      try {
+                        await _auth.currentUser!.sendEmailVerification();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Verification email resent!'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    },
+                    child: const Text('Resend Email'),
+                  ),
+                ],
+              );
+            },
           );
         }
       }
