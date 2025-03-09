@@ -7,6 +7,7 @@ import '../services/theme_service.dart';
 import '../screens/profile_edit_screen.dart';
 import '../screens/sign_in_screen.dart';
 import '../screens/dev_settings_screen.dart';
+import '../screens/preference_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -224,6 +225,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSettingsSection(
             title: 'Preferences',
             children: [
+              // Recommendation Preferences
+              _buildSettingsItem(
+                icon: Icons.tune,
+                title: 'Recommendation Preferences',
+                subtitle: 'Customize your movie recommendations',
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const PreferenceSettingsScreen(),
+                  ),
+                ),
+              ),
+
               // Notifications Toggle
               SwitchListTile(
                 title: const Text('Notifications'),

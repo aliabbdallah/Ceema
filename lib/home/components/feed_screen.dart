@@ -5,8 +5,8 @@ import 'compose_post_section.dart';
 import 'post_list.dart';
 import 'app_bar.dart';
 import '../../widgets/mood_recommendation_button.dart';
-import '../../services/recommendation_service.dart';
 import '../../models/movie.dart';
+import '../../widgets/personalized_recommendation_section.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({Key? key}) : super(key: key);
@@ -21,12 +21,7 @@ class _FeedScreenState extends State<FeedScreen>
       GlobalKey<RefreshIndicatorState>();
   bool _isLoading = false;
   bool _showFriendsOnly = false;
-  final RecommendationService _recommendationService = RecommendationService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
-
-  // Lists to store recommendations
-  List<Movie> _recommendedMovies = [];
-  bool _loadingRecommendations = true;
 
   @override
   bool get wantKeepAlive => true;
@@ -34,44 +29,12 @@ class _FeedScreenState extends State<FeedScreen>
   @override
   void initState() {
     super.initState();
-    _loadRecommendations();
-  }
-
-  Future<void> _loadRecommendations() async {
-    setState(() {
-      _loadingRecommendations = true;
-    });
-
-    try {
-      final userId = _auth.currentUser!.uid;
-
-      // Load personalized recommendations
-      final movies =
-          await _recommendationService.getGenreBasedRecommendations(userId);
-
-      if (mounted) {
-        setState(() {
-          _recommendedMovies = movies;
-          _loadingRecommendations = false;
-        });
-      }
-    } catch (e) {
-      print('Error loading recommendations: $e');
-      if (mounted) {
-        setState(() {
-          _loadingRecommendations = false;
-        });
-      }
-    }
   }
 
   Future<void> _refreshFeed() async {
     setState(() {
       _isLoading = true;
     });
-
-    // Reload recommendations
-    _loadRecommendations();
 
     // Wait for a short time to simulate refresh
     await Future.delayed(const Duration(milliseconds: 1000));
@@ -123,156 +86,6 @@ class _FeedScreenState extends State<FeedScreen>
               child: ComposePostSection(
                 onCancel: () => Navigator.pop(context),
                 maxHeight: MediaQuery.of(context).size.height * 0.9,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRecommendationsList(ColorScheme colorScheme) {
-    if (_loadingRecommendations) {
-      return Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Center(
-          child: Column(
-            children: [
-              CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Loading recommendations...',
-                style: TextStyle(
-                  color: colorScheme.onSurfaceVariant,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (_recommendedMovies.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Center(
-          child: Column(
-            children: [
-              Icon(
-                Icons.movie_filter,
-                size: 48,
-                color: colorScheme.primary.withOpacity(0.5),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'No recommendations available yet',
-                style: TextStyle(
-                  color: colorScheme.onSurface,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Rate more movies to get personalized recommendations',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: colorScheme.onSurfaceVariant,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Text(
-            'Recommended for You',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: colorScheme.onBackground,
-            ),
-          ),
-        ),
-        SizedBox(
-          height: 200,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _recommendedMovies.length,
-            itemBuilder: (context, index) {
-              final movie = _recommendedMovies[index];
-              return _buildMovieCard(movie, colorScheme);
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMovieCard(Movie movie, ColorScheme colorScheme) {
-    return GestureDetector(
-      onTap: () {
-        // Navigate to movie details screen
-        Navigator.pushNamed(
-          context,
-          '/movie_details',
-          arguments: movie,
-        );
-      },
-      child: Container(
-        width: 120,
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Movie poster
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.network(
-                movie.posterUrl,
-                height: 150,
-                width: 120,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  height: 150,
-                  width: 120,
-                  color: colorScheme.surfaceVariant,
-                  child: Icon(
-                    Icons.movie,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            // Movie title
-            Text(
-              movie.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: colorScheme.onBackground,
-              ),
-            ),
-            // Movie year
-            Text(
-              movie.year,
-              style: TextStyle(
-                fontSize: 10,
-                color: colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -375,7 +188,7 @@ class _FeedScreenState extends State<FeedScreen>
                   const MoodRecommendationButton(),
 
                   // Display personalized recommendations
-                  _buildRecommendationsList(colorScheme),
+                  const PersonalizedRecommendationSection(),
 
                   const TrendingMoviesSection(),
 
