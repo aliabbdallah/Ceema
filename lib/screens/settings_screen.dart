@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
+
 import '../services/theme_service.dart';
-import 'profile_edit_screen.dart';
-import 'sign_in_screen.dart';
+import '../screens/profile_edit_screen.dart';
+import '../screens/sign_in_screen.dart';
+import '../screens/dev_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -18,9 +19,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // Admin emails for development tools
+  final List<String> _adminEmails = [
+    'admin@example.com',
+    // Add other admin emails
+  ];
+
+  // Settings state
   bool _notificationsEnabled = true;
-  bool _darkModeEnabled = false;
-  String _privacyStatus = 'Public';
+  bool _privacyModeEnabled = false;
 
   @override
   void initState() {
@@ -39,16 +46,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() {
           _notificationsEnabled =
               userDoc.data()?['notificationsEnabled'] ?? true;
-          _darkModeEnabled = userDoc.data()?['darkModeEnabled'] ?? false;
-          _privacyStatus = userDoc.data()?['privacyStatus'] ?? 'Public';
+          _privacyModeEnabled = userDoc.data()?['privacyModeEnabled'] ?? false;
         });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading settings: $e')),
-        );
-      }
+      _showErrorSnackBar('Error loading settings: $e');
     }
   }
 
@@ -59,16 +61,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
           .doc(_auth.currentUser!.uid)
           .update({field: value});
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Settings updated')),
-      );
+      _showSuccessSnackBar('Settings updated');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating settings: $e')),
-      );
+      _showErrorSnackBar('Error updating settings: $e');
     }
   }
 
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  // Check if current user is an admin
+  bool _isAdminUser() {
+    return _adminEmails.contains(_auth.currentUser?.email);
+  }
+
+  // Sign out method
   Future<void> _signOut() async {
     try {
       await _auth.signOut();
@@ -79,19 +101,278 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error signing out: $e')),
-      );
+      _showErrorSnackBar('Error signing out: $e');
     }
   }
 
-  Future<void> _showDeleteAccountDialog() async {
-    return showDialog(
+  // Account deletion method
+  Future<void> _deleteAccount() async {
+    try {
+      // Delete user data from Firestore
+      await _firestore.collection('users').doc(_auth.currentUser!.uid).delete();
+
+      // Delete user authentication
+      await _auth.currentUser!.delete();
+
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const SignInScreen()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error deleting account: $e');
+    }
+  }
+
+  // Settings section widget
+  Widget _buildSettingsSection({
+    required String title,
+    required List<Widget> children,
+  }) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+            ),
+          ),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  // Settings item widget
+  Widget _buildSettingsItem({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    Widget? trailing,
+    VoidCallback? onTap,
+  }) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: subtitle != null ? Text(subtitle) : null,
+      trailing: trailing,
+      onTap: onTap,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Settings'),
+      ),
+      body: ListView(
+        children: [
+          // Account & Profile Section
+          _buildSettingsSection(
+            title: 'Account',
+            children: [
+              // Profile Edit
+              _buildSettingsItem(
+                icon: Icons.person,
+                title: 'Edit Profile',
+                subtitle: 'Update your personal information',
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ProfileEditScreen(),
+                  ),
+                ),
+              ),
+
+              // Email Verification Status
+              StreamBuilder<DocumentSnapshot>(
+                stream: _firestore
+                    .collection('users')
+                    .doc(_auth.currentUser!.uid)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  bool isVerified = false;
+
+                  if (snapshot.hasData && snapshot.data != null) {
+                    isVerified = snapshot.data!['emailVerified'] ?? false;
+                  }
+
+                  return _buildSettingsItem(
+                    icon: Icons.email,
+                    title: 'Email',
+                    subtitle: _auth.currentUser?.email ?? 'No email',
+                    trailing: isVerified
+                        ? const Icon(Icons.verified, color: Colors.green)
+                        : const Icon(Icons.warning, color: Colors.orange),
+                  );
+                },
+              ),
+            ],
+          ),
+
+          // Preferences Section
+          _buildSettingsSection(
+            title: 'Preferences',
+            children: [
+              // Notifications Toggle
+              SwitchListTile(
+                title: const Text('Notifications'),
+                subtitle: const Text('Receive app updates and alerts'),
+                value: _notificationsEnabled,
+                onChanged: (value) {
+                  setState(() {
+                    _notificationsEnabled = value;
+                  });
+                  _updateSetting('notificationsEnabled', value);
+                },
+              ),
+
+              // Dark Mode Toggle
+              Consumer<ThemeService>(
+                builder: (context, themeService, child) {
+                  return SwitchListTile(
+                    title: const Text('Dark Mode'),
+                    subtitle:
+                        const Text('Switch between light and dark themes'),
+                    value: themeService.isDarkMode,
+                    onChanged: (value) async {
+                      await themeService.toggleTheme();
+                    },
+                  );
+                },
+              ),
+
+              // Privacy Mode Toggle
+              SwitchListTile(
+                title: const Text('Privacy Mode'),
+                subtitle: const Text('Hide sensitive content'),
+                value: _privacyModeEnabled,
+                onChanged: (value) {
+                  setState(() {
+                    _privacyModeEnabled = value;
+                  });
+                  _updateSetting('privacyModeEnabled', value);
+                },
+              ),
+            ],
+          ),
+
+          // Security Section
+          _buildSettingsSection(
+            title: 'Security',
+            children: [
+              // Change Password
+              _buildSettingsItem(
+                icon: Icons.lock,
+                title: 'Change Password',
+                subtitle: 'Update your account password',
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  // TODO: Implement password change
+                  _showErrorSnackBar('Feature coming soon');
+                },
+              ),
+            ],
+          ),
+
+          // Developer Tools (available to all users)
+          _buildSettingsSection(
+            title: 'Developer Tools',
+            children: [
+              _buildSettingsItem(
+                icon: Icons.science,
+                title: 'Development Settings',
+                subtitle: 'Testing and data generation tools',
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const DevSettingsScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+
+          // Account Actions Section
+          _buildSettingsSection(
+            title: 'Account Actions',
+            children: [
+              // Sign Out
+              _buildSettingsItem(
+                icon: Icons.logout,
+                title: 'Sign Out',
+                subtitle: 'Log out of your account',
+                onTap: _signOut,
+              ),
+
+              // Delete Account
+              _buildSettingsItem(
+                icon: Icons.delete_forever,
+                title: 'Delete Account',
+                subtitle: 'Permanently remove your account',
+                onTap: () => _showDeleteConfirmationDialog(),
+              ),
+            ],
+          ),
+
+          // About Section
+          _buildSettingsSection(
+            title: 'About',
+            children: [
+              _buildSettingsItem(
+                icon: Icons.info,
+                title: 'App Version',
+                subtitle: 'Ceema v1.0.0',
+              ),
+              _buildSettingsItem(
+                icon: Icons.description,
+                title: 'Terms of Service',
+                trailing: const Icon(Icons.open_in_new),
+                onTap: () {
+                  // TODO: Implement Terms of Service
+                  _showErrorSnackBar('Feature coming soon');
+                },
+              ),
+              _buildSettingsItem(
+                icon: Icons.privacy_tip,
+                title: 'Privacy Policy',
+                trailing: const Icon(Icons.open_in_new),
+                onTap: () {
+                  // TODO: Implement Privacy Policy
+                  _showErrorSnackBar('Feature coming soon');
+                },
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  // Show delete confirmation dialog
+  void _showDeleteConfirmationDialog() {
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Account'),
         content: const Text(
-            'Are you sure you want to delete your account? This action cannot be undone.'),
+          'Are you sure you want to delete your account? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -108,264 +389,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Future<void> _deleteAccount() async {
-    try {
-      // Delete user data from Firestore
-      await _firestore.collection('users').doc(_auth.currentUser!.uid).delete();
-
-      // Delete user authentication
-      await _auth.currentUser!.delete();
-
-      if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const SignInScreen()),
-          (route) => false,
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error deleting account: $e')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
-      body: ListView(
-        children: [
-          // Account Section
-          _buildSectionHeader('Account'),
-          ListTile(
-            leading: const Icon(Icons.person),
-            title: const Text('Edit Profile'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ProfileEditScreen(),
-                ),
-              );
-            },
-          ),
-          StreamBuilder<DocumentSnapshot>(
-            stream: _firestore
-                .collection('users')
-                .doc(_auth.currentUser!.uid)
-                .snapshots(),
-            builder: (context, snapshot) {
-              bool isVerified = false;
-
-              if (snapshot.hasData && snapshot.data != null) {
-                isVerified = snapshot.data!['emailVerified'] ?? false;
-              }
-
-              return Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.email),
-                    title: const Text('Email'),
-                    subtitle: Text(_auth.currentUser?.email ?? 'No email'),
-                    trailing: isVerified
-                        ? const Icon(Icons.verified, color: Colors.green)
-                        : const Icon(Icons.warning, color: Colors.orange),
-                  ),
-                  if (!isVerified && _auth.currentUser != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.info,
-                                      color: Colors.orange, size: 16),
-                                  const SizedBox(width: 8),
-                                  const Expanded(
-                                    child: Text(
-                                      'Please verify your email to access all features',
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ),
-                                  TextButton(
-                                    onPressed: () async {
-                                      try {
-                                        await _auth.currentUser!
-                                            .sendEmailVerification();
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                                'Verification email sent!'),
-                                            backgroundColor: Colors.green,
-                                          ),
-                                        );
-                                      } catch (e) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                            content: Text('Error: $e'),
-                                            backgroundColor: Colors.red,
-                                          ),
-                                        );
-                                      }
-                                    },
-                                    child: const Text('Resend'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.lock),
-            title: const Text('Change Password'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              // TODO: Implement password change functionality
-            },
-          ),
-
-          // Preferences Section
-          _buildSectionHeader('Preferences'),
-          SwitchListTile(
-            title: const Text('Notifications'),
-            subtitle: const Text('Enable push notifications'),
-            value: _notificationsEnabled,
-            onChanged: (value) {
-              setState(() {
-                _notificationsEnabled = value;
-              });
-              _updateSetting('notificationsEnabled', value);
-            },
-          ),
-          Consumer<ThemeService>(
-            builder: (context, themeService, child) {
-              return SwitchListTile(
-                title: const Text('Dark Mode'),
-                subtitle: const Text('Enable dark theme'),
-                value: themeService.isDarkMode,
-                onChanged: (value) async {
-                  // Update local state
-                  setState(() {
-                    _darkModeEnabled = value;
-                  });
-
-                  // Toggle theme in ThemeService (which also updates Firestore)
-                  await themeService.toggleTheme();
-                },
-              );
-            },
-          ),
-
-          // Privacy Section
-          _buildSectionHeader('Privacy'),
-          ListTile(
-            title: const Text('Profile Privacy'),
-            subtitle: Text('Your profile is $_privacyStatus'),
-            trailing: DropdownButton<String>(
-              value: _privacyStatus,
-              onChanged: (String? newValue) {
-                if (newValue != null) {
-                  setState(() {
-                    _privacyStatus = newValue;
-                  });
-                  _updateSetting('privacyStatus', newValue);
-                }
-              },
-              items: <String>['Public', 'Friends Only', 'Private']
-                  .map<DropdownMenuItem<String>>((String value) {
-                return DropdownMenuItem<String>(
-                  value: value,
-                  child: Text(value),
-                );
-              }).toList(),
-              underline: Container(),
-            ),
-          ),
-
-          // About Section
-          _buildSectionHeader('About'),
-          ListTile(
-            leading: const Icon(Icons.info),
-            title: const Text('About Ceema'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              // TODO: Show app info
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.description),
-            title: const Text('Terms of Service'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              // TODO: Show terms of service
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.privacy_tip),
-            title: const Text('Privacy Policy'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              // TODO: Show privacy policy
-            },
-          ),
-
-          // Sign Out and Delete Account
-          _buildSectionHeader('Account Actions'),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.orange),
-            title: const Text(
-              'Sign Out',
-              style: TextStyle(color: Colors.orange),
-            ),
-            onTap: _signOut,
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete_forever, color: Colors.red),
-            title: const Text(
-              'Delete Account',
-              style: TextStyle(color: Colors.red),
-            ),
-            onTap: _showDeleteAccountDialog,
-          ),
-
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: Theme.of(context).colorScheme.primary,
-        ),
       ),
     );
   }

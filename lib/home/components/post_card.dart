@@ -1,4 +1,4 @@
-// home/components/post_card.dart
+// lib/home/components/post_card.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -177,6 +177,7 @@ class _PostCardState extends State<PostCard> {
       child: Row(
         children: [
           CircleAvatar(
+            radius: 20,
             backgroundImage: NetworkImage(widget.post.userAvatar),
           ),
           const SizedBox(width: 12),

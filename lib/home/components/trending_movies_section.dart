@@ -1,3 +1,4 @@
+// lib/home/components/trending_movies_section.dart
 import 'package:flutter/material.dart';
 import '../../models/movie.dart';
 import '../../services/tmdb_service.dart';
@@ -161,8 +162,7 @@ class _TrendingMoviesSectionState extends State<TrendingMoviesSection>
                             ),
                             const SizedBox(width: 2),
                             Text(
-                              movie.rating.toStringAsFixed(
-                                  1), // Using the movie's IMDb rating
+                              movie.rating.toStringAsFixed(1),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,

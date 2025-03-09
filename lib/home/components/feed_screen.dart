@@ -15,7 +15,8 @@ class FeedScreen extends StatefulWidget {
   _FeedScreenState createState() => _FeedScreenState();
 }
 
-class _FeedScreenState extends State<FeedScreen> {
+class _FeedScreenState extends State<FeedScreen>
+    with AutomaticKeepAliveClientMixin {
   final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey =
       GlobalKey<RefreshIndicatorState>();
   bool _isLoading = false;
@@ -24,10 +25,11 @@ class _FeedScreenState extends State<FeedScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // Lists to store recommendations
-  List<Movie> _genreRecommendations = [];
-  List<Movie> _similarTasteRecommendations = [];
-  List<Movie> _weekendWatchRecommendations = [];
+  List<Movie> _recommendedMovies = [];
   bool _loadingRecommendations = true;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -43,26 +45,13 @@ class _FeedScreenState extends State<FeedScreen> {
     try {
       final userId = _auth.currentUser!.uid;
 
-      // Load recommendations in parallel
-      final genreFuture =
-          _recommendationService.getGenreBasedRecommendations(userId);
-      final similarTasteFuture =
-          _recommendationService.getSimilarTasteRecommendations(userId);
-      final weekendWatchFuture =
-          _recommendationService.getWeekendWatchRecommendations(userId);
-
-      // Wait for all recommendations to load
-      final results = await Future.wait([
-        genreFuture,
-        similarTasteFuture,
-        weekendWatchFuture,
-      ]);
+      // Load personalized recommendations
+      final movies =
+          await _recommendationService.getGenreBasedRecommendations(userId);
 
       if (mounted) {
         setState(() {
-          _genreRecommendations = results[0];
-          _similarTasteRecommendations = results[1];
-          _weekendWatchRecommendations = results[2];
+          _recommendedMovies = movies;
           _loadingRecommendations = false;
         });
       }
@@ -85,7 +74,7 @@ class _FeedScreenState extends State<FeedScreen> {
     _loadRecommendations();
 
     // Wait for a short time to simulate refresh
-    await Future.delayed(const Duration(milliseconds: 1500));
+    await Future.delayed(const Duration(milliseconds: 1000));
 
     if (mounted) {
       setState(() {
@@ -142,7 +131,7 @@ class _FeedScreenState extends State<FeedScreen> {
     );
   }
 
-  Widget _buildRecommendationSection(ColorScheme colorScheme) {
+  Widget _buildRecommendationsList(ColorScheme colorScheme) {
     if (_loadingRecommendations) {
       return Padding(
         padding: const EdgeInsets.all(16.0),
@@ -166,88 +155,48 @@ class _FeedScreenState extends State<FeedScreen> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Genre-based recommendations
-        if (_genreRecommendations.isNotEmpty) ...[
-          _buildRecommendationList(
-            title: 'Based on your preferred genres',
-            movies: _genreRecommendations,
-            colorScheme: colorScheme,
-          ),
-        ],
-
-        // Similar taste recommendations
-        if (_similarTasteRecommendations.isNotEmpty) ...[
-          _buildRecommendationList(
-            title: 'Based on similar tastes',
-            movies: _similarTasteRecommendations,
-            colorScheme: colorScheme,
-          ),
-        ],
-
-        // Weekend watch recommendations
-        if (_weekendWatchRecommendations.isNotEmpty) ...[
-          _buildRecommendationList(
-            title: 'Weekend watch suggestions',
-            movies: _weekendWatchRecommendations,
-            colorScheme: colorScheme,
-          ),
-        ],
-
-        // If no recommendations are available
-        if (_genreRecommendations.isEmpty &&
-            _similarTasteRecommendations.isEmpty &&
-            _weekendWatchRecommendations.isEmpty)
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Center(
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.movie_filter,
-                    size: 48,
-                    color: colorScheme.primary.withOpacity(0.5),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'No recommendations available yet',
-                    style: TextStyle(
-                      color: colorScheme.onSurface,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Rate more movies to get personalized recommendations',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: colorScheme.onSurfaceVariant,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
+    if (_recommendedMovies.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(
+                Icons.movie_filter,
+                size: 48,
+                color: colorScheme.primary.withOpacity(0.5),
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                'No recommendations available yet',
+                style: TextStyle(
+                  color: colorScheme.onSurface,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Rate more movies to get personalized recommendations',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: colorScheme.onSurfaceVariant,
+                  fontSize: 14,
+                ),
+              ),
+            ],
           ),
-      ],
-    );
-  }
+        ),
+      );
+    }
 
-  Widget _buildRecommendationList({
-    required String title,
-    required List<Movie> movies,
-    required ColorScheme colorScheme,
-  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
-            title,
+            'Recommended for You',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -259,10 +208,10 @@ class _FeedScreenState extends State<FeedScreen> {
           height: 200,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            itemCount: movies.length,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: _recommendedMovies.length,
             itemBuilder: (context, index) {
-              final movie = movies[index];
+              final movie = _recommendedMovies[index];
               return _buildMovieCard(movie, colorScheme);
             },
           ),
@@ -353,14 +302,11 @@ class _FeedScreenState extends State<FeedScreen> {
           ),
           child: Row(
             children: [
-              Hero(
-                tag: 'user-avatar',
-                child: CircleAvatar(
-                  radius: 20,
-                  backgroundImage: NetworkImage(
-                    FirebaseAuth.instance.currentUser?.photoURL ??
-                        'https://ui-avatars.com/api/?name=${FirebaseAuth.instance.currentUser?.displayName ?? "User"}',
-                  ),
+              CircleAvatar(
+                radius: 20,
+                backgroundImage: NetworkImage(
+                  FirebaseAuth.instance.currentUser?.photoURL ??
+                      'https://ui-avatars.com/api/?name=${FirebaseAuth.instance.currentUser?.displayName ?? "User"}',
                 ),
               ),
               const SizedBox(width: 12),
@@ -398,6 +344,7 @@ class _FeedScreenState extends State<FeedScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -425,23 +372,10 @@ class _FeedScreenState extends State<FeedScreen> {
                 children: [
                   _buildCreatePostCard(colorScheme),
 
-                  // Section title for recommendations
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Text(
-                      'Recommendations',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.onBackground,
-                      ),
-                    ),
-                  ),
-
                   const MoodRecommendationButton(),
 
                   // Display personalized recommendations
-                  _buildRecommendationSection(colorScheme),
+                  _buildRecommendationsList(colorScheme),
 
                   const TrendingMoviesSection(),
 
@@ -500,6 +434,7 @@ class _FeedScreenState extends State<FeedScreen> {
                 ],
               ),
             ),
+            // Post list section
             PostList(showFriendsOnly: _showFriendsOnly),
           ],
         ),

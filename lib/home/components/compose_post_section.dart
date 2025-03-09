@@ -1,4 +1,4 @@
-// home/components/compose_post_section.dart
+// lib/home/components/compose_post_section.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/movie.dart';
@@ -30,7 +30,6 @@ class _ComposePostSectionState extends State<ComposePostSection> {
   double _rating = 0.0;
   bool _isLoading = false;
   bool _showEmojiPicker = false;
-  double _textFieldHeight = 100;
 
   @override
   void initState() {
@@ -207,10 +206,10 @@ class _ComposePostSectionState extends State<ComposePostSection> {
           style: TextStyle(fontSize: 14),
         ),
         StarRating(
-          rating: _rating.toDouble(),
+          rating: _rating,
           size: 24,
           spacing: 4,
-          allowHalfRating: false,
+          allowHalfRating: true,
           onRatingChanged: (rating) {
             setState(() {
               _rating = rating;
@@ -305,9 +304,6 @@ class _ComposePostSectionState extends State<ComposePostSection> {
                         hintText: 'Share your thoughts about a movie...',
                         border: InputBorder.none,
                       ),
-                      onChanged: (value) {
-                        // Optional: Add character limit handling here
-                      },
                     ),
                   ),
                 ],
@@ -330,12 +326,5 @@ class _ComposePostSectionState extends State<ComposePostSection> {
         ),
       ),
     );
-  }
-}
-
-// Optional: Add this extension for character count
-extension on String {
-  int get characterCount {
-    return characters.length;
   }
 }

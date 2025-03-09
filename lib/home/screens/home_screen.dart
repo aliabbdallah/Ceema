@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import '../components/feed_screen.dart';
-import 'package:ceema/screens/profile_screen.dart';
-import 'package:ceema/screens/diary_screen.dart';
 import 'package:ceema/screens/mood_entry_point_screen.dart';
-import 'package:ceema/screens/friends_screen.dart';
+import 'package:ceema/screens/diary_screen.dart';
+import 'package:ceema/screens/profile_screen.dart';
 import 'package:ceema/screens/watchlist_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -91,7 +90,6 @@ class _HomeScreenState extends State<HomeScreen>
           children: screens,
         ),
       ),
-      floatingActionButton: null,
       bottomNavigationBar: NavigationBar(
         elevation: 8,
         backgroundColor: colorScheme.surface,
