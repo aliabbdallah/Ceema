@@ -1,18 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/post.dart';
 import '../../services/post_service.dart';
 import 'post_card.dart';
 import '../../widgets/loading_indicator.dart';
 
 class PostList extends StatelessWidget {
-  const PostList({Key? key}) : super(key: key);
+  final bool showFriendsOnly;
+
+  const PostList({
+    Key? key,
+    this.showFriendsOnly = false,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final postService = PostService();
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null) {
+      return const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Center(
+            child: Text('Please sign in to view posts'),
+          ),
+        ),
+      );
+    }
 
     return StreamBuilder<List<Post>>(
-      stream: PostService().getPosts(),
+      stream: showFriendsOnly
+          ? postService.getFriendsPosts(currentUser.uid)
+          : postService.getPosts(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return SliverToBoxAdapter(

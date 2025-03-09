@@ -173,6 +173,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       });
 
                       try {
+                        // Get the user profile to get the avatar URL
+                        final userProfileData =
+                            await _profileService.getUserProfile(widget.userId);
+                        final String receiverAvatar =
+                            userProfileData['profileImageUrl'] ?? '';
+
                         final currentUser = _auth.currentUser!;
                         await _requestService.sendFriendRequest(
                           senderId: currentUser.uid,
@@ -180,8 +186,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           senderAvatar: currentUser.photoURL ?? '',
                           receiverId: widget.userId,
                           receiverName: widget.username,
-                          receiverAvatar:
-                              '', // Will be updated from user profile
+                          receiverAvatar: receiverAvatar,
                         );
 
                         if (mounted) {

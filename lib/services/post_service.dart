@@ -58,6 +58,47 @@ class PostService {
     });
   }
 
+  // Get posts from friends (users the current user follows)
+  Stream<List<Post>> getFriendsPosts(String userId) async* {
+    try {
+      // Get the list of users that the current user follows
+      final friendsSnapshot = await _firestore
+          .collection('friends')
+          .where('userId', isEqualTo: userId)
+          .get();
+
+      // Extract friend IDs
+      final List<String> friendIds = friendsSnapshot.docs
+          .map((doc) => doc.data()['friendId'] as String)
+          .toList();
+
+      // Add the current user's ID to include their posts too
+      friendIds.add(userId);
+
+      // If the user doesn't follow anyone, just return their own posts
+      if (friendIds.length <= 1) {
+        yield* getUserPosts(userId);
+        return;
+      }
+
+      // Query posts from friends and the user
+      yield* _firestore
+          .collection('posts')
+          .where('userId', whereIn: friendIds)
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map((snapshot) {
+        return snapshot.docs
+            .map((doc) => Post.fromJson(doc.data(), doc.id))
+            .toList();
+      });
+    } catch (e) {
+      print('Error getting friends posts: $e');
+      // Return an empty list in case of error
+      yield [];
+    }
+  }
+
   // Toggle like on a post
   Future<void> toggleLike(String postId, String userId) async {
     final postRef = _firestore.collection('posts').doc(postId);

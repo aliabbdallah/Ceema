@@ -3,6 +3,25 @@ allprojects {
         google()
         mavenCentral()
     }
+    
+    // Apply the same Android configuration to all projects
+    plugins.withId('com.android.library') {
+        android {
+            compileSdk = 35
+            
+            compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_1_8
+                targetCompatibility = JavaVersion.VERSION_1_8
+            }
+        }
+    }
+    
+    // Apply the same Kotlin configuration to all projects
+    plugins.withId('org.jetbrains.kotlin.android') {
+        kotlin {
+            jvmToolchain(11)
+        }
+    }
 }
 
 rootProject.buildDir = "../build"

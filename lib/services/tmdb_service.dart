@@ -5,6 +5,31 @@ class TMDBService {
   static const String _apiKey = '4ae207526acb81363b703e810d265acf';
   static const String _baseUrl = 'https://api.themoviedb.org/3';
 
+  // Get movies by genre IDs
+  static Future<List<Map<String, dynamic>>> getMoviesByGenres(
+      List<int> genreIds) async {
+    if (genreIds.isEmpty) return [];
+
+    // Convert genre IDs to comma-separated string
+    final String genreParam = genreIds.join(',');
+
+    final response = await http.get(
+      Uri.parse(
+          '$_baseUrl/discover/movie?api_key=$_apiKey&with_genres=$genreParam&sort_by=popularity.desc'),
+    );
+
+    if (response.statusCode == 200) {
+      final jsonString = response.body;
+      final jsonReader = JsonDecoder((key, value) {
+        return value;
+      });
+      final data = jsonReader.convert(jsonString);
+      return List<Map<String, dynamic>>.from(data['results']);
+    } else {
+      throw Exception('Failed to load movies by genres');
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> getTrendingMovies() async {
     final response = await http.get(
       Uri.parse('$_baseUrl/trending/movie/week?api_key=$_apiKey'),

@@ -5,7 +5,8 @@ import 'compose_post_section.dart';
 import 'post_list.dart';
 import 'app_bar.dart';
 import '../../widgets/mood_recommendation_button.dart';
-import '../../screens/timeline_screen.dart';
+import '../../services/recommendation_service.dart';
+import '../../models/movie.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({Key? key}) : super(key: key);
@@ -18,11 +19,70 @@ class _FeedScreenState extends State<FeedScreen> {
   final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey =
       GlobalKey<RefreshIndicatorState>();
   bool _isLoading = false;
+  bool _showFriendsOnly = false;
+  final RecommendationService _recommendationService = RecommendationService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  // Lists to store recommendations
+  List<Movie> _genreRecommendations = [];
+  List<Movie> _similarTasteRecommendations = [];
+  List<Movie> _weekendWatchRecommendations = [];
+  bool _loadingRecommendations = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecommendations();
+  }
+
+  Future<void> _loadRecommendations() async {
+    setState(() {
+      _loadingRecommendations = true;
+    });
+
+    try {
+      final userId = _auth.currentUser!.uid;
+
+      // Load recommendations in parallel
+      final genreFuture =
+          _recommendationService.getGenreBasedRecommendations(userId);
+      final similarTasteFuture =
+          _recommendationService.getSimilarTasteRecommendations(userId);
+      final weekendWatchFuture =
+          _recommendationService.getWeekendWatchRecommendations(userId);
+
+      // Wait for all recommendations to load
+      final results = await Future.wait([
+        genreFuture,
+        similarTasteFuture,
+        weekendWatchFuture,
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _genreRecommendations = results[0];
+          _similarTasteRecommendations = results[1];
+          _weekendWatchRecommendations = results[2];
+          _loadingRecommendations = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading recommendations: $e');
+      if (mounted) {
+        setState(() {
+          _loadingRecommendations = false;
+        });
+      }
+    }
+  }
 
   Future<void> _refreshFeed() async {
     setState(() {
       _isLoading = true;
     });
+
+    // Reload recommendations
+    _loadRecommendations();
 
     // Wait for a short time to simulate refresh
     await Future.delayed(const Duration(milliseconds: 1500));
@@ -74,6 +134,196 @@ class _FeedScreenState extends State<FeedScreen> {
               child: ComposePostSection(
                 onCancel: () => Navigator.pop(context),
                 maxHeight: MediaQuery.of(context).size.height * 0.9,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecommendationSection(ColorScheme colorScheme) {
+    if (_loadingRecommendations) {
+      return Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: Column(
+            children: [
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Loading recommendations...',
+                style: TextStyle(
+                  color: colorScheme.onSurfaceVariant,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Genre-based recommendations
+        if (_genreRecommendations.isNotEmpty) ...[
+          _buildRecommendationList(
+            title: 'Based on your preferred genres',
+            movies: _genreRecommendations,
+            colorScheme: colorScheme,
+          ),
+        ],
+
+        // Similar taste recommendations
+        if (_similarTasteRecommendations.isNotEmpty) ...[
+          _buildRecommendationList(
+            title: 'Based on similar tastes',
+            movies: _similarTasteRecommendations,
+            colorScheme: colorScheme,
+          ),
+        ],
+
+        // Weekend watch recommendations
+        if (_weekendWatchRecommendations.isNotEmpty) ...[
+          _buildRecommendationList(
+            title: 'Weekend watch suggestions',
+            movies: _weekendWatchRecommendations,
+            colorScheme: colorScheme,
+          ),
+        ],
+
+        // If no recommendations are available
+        if (_genreRecommendations.isEmpty &&
+            _similarTasteRecommendations.isEmpty &&
+            _weekendWatchRecommendations.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.movie_filter,
+                    size: 48,
+                    color: colorScheme.primary.withOpacity(0.5),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No recommendations available yet',
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Rate more movies to get personalized recommendations',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildRecommendationList({
+    required String title,
+    required List<Movie> movies,
+    required ColorScheme colorScheme,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: colorScheme.onBackground,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            itemCount: movies.length,
+            itemBuilder: (context, index) {
+              final movie = movies[index];
+              return _buildMovieCard(movie, colorScheme);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMovieCard(Movie movie, ColorScheme colorScheme) {
+    return GestureDetector(
+      onTap: () {
+        // Navigate to movie details screen
+        Navigator.pushNamed(
+          context,
+          '/movie_details',
+          arguments: movie,
+        );
+      },
+      child: Container(
+        width: 120,
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Movie poster
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                movie.posterUrl,
+                height: 150,
+                width: 120,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  height: 150,
+                  width: 120,
+                  color: colorScheme.surfaceVariant,
+                  child: Icon(
+                    Icons.movie,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Movie title
+            Text(
+              movie.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.onBackground,
+              ),
+            ),
+            // Movie year
+            Text(
+              movie.year,
+              style: TextStyle(
+                fontSize: 10,
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -170,82 +420,6 @@ class _FeedScreenState extends State<FeedScreen> {
               ),
             ),
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          colorScheme.primary,
-                          colorScheme.tertiary,
-                        ],
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Your Personalized Timeline',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.onPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Discover posts based on your movie preferences and friends',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color:
-                                        colorScheme.onPrimary.withOpacity(0.9),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const TimelineScreen(),
-                                ),
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: colorScheme.onPrimary,
-                              foregroundColor: colorScheme.primary,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                            ),
-                            child: const Text('View'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            SliverToBoxAdapter(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -265,9 +439,13 @@ class _FeedScreenState extends State<FeedScreen> {
                   ),
 
                   const MoodRecommendationButton(),
+
+                  // Display personalized recommendations
+                  _buildRecommendationSection(colorScheme),
+
                   const TrendingMoviesSection(),
 
-                  // Section title for feed
+                  // Section title for feed with filter toggle
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                     child: Row(
@@ -281,12 +459,40 @@ class _FeedScreenState extends State<FeedScreen> {
                             color: colorScheme.onBackground,
                           ),
                         ),
-                        TextButton.icon(
-                          onPressed: () {
-                            // TODO: Implement filter functionality
-                          },
-                          icon: const Icon(Icons.filter_list, size: 16),
-                          label: const Text('Filter'),
+                        Row(
+                          children: [
+                            FilterChip(
+                              label: const Text('All Posts'),
+                              selected: !_showFriendsOnly,
+                              onSelected: (selected) {
+                                setState(() => _showFriendsOnly = false);
+                              },
+                              labelStyle: TextStyle(
+                                color: !_showFriendsOnly
+                                    ? colorScheme.onPrimary
+                                    : colorScheme.onSurfaceVariant,
+                                fontSize: 12,
+                              ),
+                              selectedColor: colorScheme.primary,
+                              backgroundColor: colorScheme.surfaceVariant,
+                            ),
+                            const SizedBox(width: 8),
+                            FilterChip(
+                              label: const Text('Friends Only'),
+                              selected: _showFriendsOnly,
+                              onSelected: (selected) {
+                                setState(() => _showFriendsOnly = true);
+                              },
+                              labelStyle: TextStyle(
+                                color: _showFriendsOnly
+                                    ? colorScheme.onPrimary
+                                    : colorScheme.onSurfaceVariant,
+                                fontSize: 12,
+                              ),
+                              selectedColor: colorScheme.primary,
+                              backgroundColor: colorScheme.surfaceVariant,
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -294,7 +500,7 @@ class _FeedScreenState extends State<FeedScreen> {
                 ],
               ),
             ),
-            const PostList(),
+            PostList(showFriendsOnly: _showFriendsOnly),
           ],
         ),
       ),

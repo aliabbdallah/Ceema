@@ -5,7 +5,6 @@ import 'package:ceema/screens/diary_screen.dart';
 import 'package:ceema/screens/mood_entry_point_screen.dart';
 import 'package:ceema/screens/friends_screen.dart';
 import 'package:ceema/screens/watchlist_screen.dart';
-import 'package:ceema/screens/timeline_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -92,25 +91,7 @@ class _HomeScreenState extends State<HomeScreen>
           children: screens,
         ),
       ),
-      floatingActionButton: _currentTab == 0
-          ? Padding(
-              padding: const EdgeInsets.only(bottom: 70.0, right: 16.0),
-              child: FloatingActionButton(
-                heroTag: 'timeline_fab',
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const TimelineScreen(),
-                    ),
-                  );
-                },
-                backgroundColor: colorScheme.tertiary,
-                child: const Icon(Icons.timeline),
-                tooltip: 'View Timeline',
-              ),
-            )
-          : null,
+      floatingActionButton: null,
       bottomNavigationBar: NavigationBar(
         elevation: 8,
         backgroundColor: colorScheme.surface,

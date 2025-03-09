@@ -9,6 +9,7 @@ import 'profile_edit_screen.dart';
 import '../screens/friends_screen.dart';
 import 'settings_screen.dart';
 import '../screens/watchlist_screen.dart';
+import '../screens/friend_request_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -27,47 +28,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 16),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+        child: Column(
           children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                InkWell(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => FriendsScreen(
+                        userId: _auth.currentUser!.uid,
+                        initialTabIndex: 0,
+                      ),
+                    ),
+                  ),
+                  child: _buildStatItem('Following', user.followingCount),
+                ),
+                InkWell(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => FriendsScreen(
+                        userId: _auth.currentUser!.uid,
+                        initialTabIndex: 1,
+                      ),
+                    ),
+                  ),
+                  child: _buildStatItem('Followers', user.followersCount),
+                ),
+                InkWell(
+                  onTap: () {
+                    // Navigate to the watchlist screen directly
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const WatchlistScreen(),
+                      ),
+                    );
+                  },
+                  child: _buildStatItem('Watchlist', user.watchlistCount),
+                ),
+                _buildStatItem(
+                    'Movies', 0), // Replace with actual movie count later
+              ],
+            ),
+            const SizedBox(height: 16),
             InkWell(
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => FriendsScreen(
-                    userId: _auth.currentUser!.uid,
-                    initialTabIndex: 0,
-                  ),
+                  builder: (context) => const FriendRequestsScreen(),
                 ),
               ),
-              child: _buildStatItem('Following', user.followingCount),
-            ),
-            InkWell(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => FriendsScreen(
-                    userId: _auth.currentUser!.uid,
-                    initialTabIndex: 1,
-                  ),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.person_add),
+                    SizedBox(width: 8),
+                    Text('Friend Requests'),
+                  ],
                 ),
               ),
-              child: _buildStatItem('Followers', user.followersCount),
             ),
-            InkWell(
-              onTap: () {
-                // Navigate to the watchlist screen directly
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const WatchlistScreen(),
-                  ),
-                );
-              },
-              child: _buildStatItem('Watchlist', user.watchlistCount),
-            ),
-            _buildStatItem(
-                'Movies', 0), // Replace with actual movie count later
           ],
         ),
       ),

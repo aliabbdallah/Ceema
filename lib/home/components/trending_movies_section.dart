@@ -161,7 +161,8 @@ class _TrendingMoviesSectionState extends State<TrendingMoviesSection>
                             ),
                             const SizedBox(width: 2),
                             Text(
-                              '8.5', // This would ideally come from the movie data
+                              movie.rating.toStringAsFixed(
+                                  1), // Using the movie's IMDb rating
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,

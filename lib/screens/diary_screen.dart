@@ -203,12 +203,12 @@ class _DiaryScreenState extends State<DiaryScreen> {
                   const SizedBox(width: 8),
                   FilterChip(
                     label: const Text('Favorites'),
-                    selected: _selectedFilter == 'Favorites',
+                    selected: _selectedFilter == 'favorites',
                     onSelected: (selected) {
-                      setState(() => _selectedFilter = 'Favorites');
+                      setState(() => _selectedFilter = 'favorites');
                     },
                     labelStyle: TextStyle(
-                      color: _selectedFilter == 'Favorites'
+                      color: _selectedFilter == 'favorites'
                           ? Theme.of(context).colorScheme.onPrimary
                           : Theme.of(context).colorScheme.onSurface,
                     ),
@@ -218,12 +218,12 @@ class _DiaryScreenState extends State<DiaryScreen> {
                   const SizedBox(width: 8),
                   FilterChip(
                     label: const Text('Rewatches'),
-                    selected: _selectedFilter == 'Rewatches',
+                    selected: _selectedFilter == 'rewatches',
                     onSelected: (selected) {
-                      setState(() => _selectedFilter = 'Rewatches');
+                      setState(() => _selectedFilter = 'rewatches');
                     },
                     labelStyle: TextStyle(
-                      color: _selectedFilter == 'Rewatches'
+                      color: _selectedFilter == 'rewatches'
                           ? Theme.of(context).colorScheme.onPrimary
                           : Theme.of(context).colorScheme.onSurface,
                     ),
