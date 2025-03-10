@@ -8,6 +8,8 @@ class TMDBService {
   // Get movies by genre IDs
   static Future<List<Map<String, dynamic>>> getMoviesByGenres(
       List<int> genreIds) async {
+    print('Getting movies for genres: $genreIds');
+
     if (genreIds.isEmpty) return [];
 
     // Convert genre IDs to comma-separated string

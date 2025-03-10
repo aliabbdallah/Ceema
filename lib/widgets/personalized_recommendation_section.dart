@@ -179,17 +179,27 @@ class _PersonalizedRecommendationSectionState
                   ),
                 ],
               ),
-              IconButton(
-                icon: const Icon(Icons.tune),
-                tooltip: 'Adjust Preferences',
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const PreferenceSettingsScreen(),
-                    ),
-                  ).then((_) => _loadRecommendations());
-                },
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    tooltip: 'Force Refresh',
+                    onPressed: _loadRecommendations,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.tune),
+                    tooltip: 'Adjust Preferences',
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              const PreferenceSettingsScreen(),
+                        ),
+                      ).then((_) => _loadRecommendations());
+                    },
+                  ),
+                ],
               ),
             ],
           ),

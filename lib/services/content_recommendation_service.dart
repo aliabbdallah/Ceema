@@ -19,15 +19,21 @@ class ContentRecommendationService {
   Future<List<Movie>> getContentBasedRecommendations({int limit = 10}) async {
     try {
       final userId = _auth.currentUser?.uid;
+      print('Getting recommendations for user: $userId');
+
       if (userId == null) {
+        print('ERROR: User not authenticated');
         throw Exception('User not authenticated');
       }
 
       // Get user preferences
       final preferences = await _preferenceService.getUserPreferences();
+      print(
+          'User preferences loaded: ${preferences.likes.length} likes, ${preferences.dislikes.length} dislikes');
 
       // Skip if no preferences set
       if (preferences.likes.isEmpty) {
+        print('WARNING: No preferences set, falling back to trending');
         return _getFallbackRecommendations(limit);
       }
 
