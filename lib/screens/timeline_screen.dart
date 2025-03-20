@@ -174,10 +174,7 @@ class _TimelineScreenState extends State<TimelineScreen>
             ),
 
           // Post content
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: PostCard(post: item.post!),
-          ),
+          PostCard(post: item.post!),
         ],
       ),
     );

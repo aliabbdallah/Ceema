@@ -1,353 +1,196 @@
-import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../models/movie.dart';
-import 'tmdb_service.dart';
-import 'friend_service.dart';
-
-// Helper class for weighted ratings
-class _WeightedRating {
-  final String movieId;
-  double sumRatings = 0;
-  double sumWeights = 0;
-  int count = 0;
-
-  _WeightedRating(this.movieId);
-
-  void addRating(double rating, double weight) {
-    sumRatings += rating * weight;
-    sumWeights += weight;
-    count++;
-  }
-
-  double getWeightedRating() {
-    if (sumWeights == 0) return 0;
-    return sumRatings / sumWeights;
-  }
-}
+import '../models/post.dart';
+import '../models/user.dart';
 
 class RecommendationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FriendService _friendService = FriendService();
 
-  // Get comprehensive personalized recommendations
-  Future<List<Movie>> getPersonalizedRecommendations(String userId) async {
-    try {
-      // Combine multiple recommendation strategies
-      final genreRecommendations = await getGenreBasedRecommendations(userId);
-      final similarTasteRecommendations =
-          await getSimilarTasteRecommendations(userId);
-      final weekendRecommendations =
-          await getWeekendWatchRecommendations(userId);
+  // Get recommendations for the current user
+  Future<List<Post>> getRecommendedPosts({int limit = 10}) async {
+    // Step 1: Get user data for personalization
+    final userId = _auth.currentUser!.uid;
+    final userDoc = await _firestore.collection('users').doc(userId).get();
+    final userData = userDoc.data() ?? {};
 
-      // Merge recommendations
-      final recommendations = [
-        ...genreRecommendations,
-        ...similarTasteRecommendations,
-        ...weekendRecommendations,
-      ];
+    // Get user's favorite genres
+    final List<String> favoriteGenres =
+        List<String>.from(userData['favoriteGenres'] ?? []);
 
-      // Remove duplicates while preserving order
-      final uniqueRecommendations = recommendations.toSet().toList();
+    // Step 2: Get user's social connections
+    final followingSnapshot = await _firestore
+        .collection('friends')
+        .doc(userId)
+        .collection('following')
+        .get();
 
-      // Sort by a comprehensive relevance score
-      uniqueRecommendations.sort((a, b) =>
-          _calculateRelevanceScore(b).compareTo(_calculateRelevanceScore(a)));
+    final List<String> following =
+        followingSnapshot.docs.map((doc) => doc.id).toList();
 
-      return uniqueRecommendations.take(10).toList();
-    } catch (e) {
-      print('Error in personalized recommendations: $e');
-      return [];
-    }
-  }
+    // Step 3: Get user's previously liked posts
+    final likedPostsSnapshot = await _firestore
+        .collection('posts')
+        .where('likes', arrayContains: userId)
+        .get();
 
-  // Calculate a comprehensive relevance score for a movie
-  double _calculateRelevanceScore(Movie movie) {
-    double score = 0;
+    final List<String> likedPostIds =
+        likedPostsSnapshot.docs.map((doc) => doc.id).toList();
 
-    // Vote average contribution (0-10 scale)
-    score += (movie.voteAverage) * 0.4; // 40% weight
+    final List<String> likedMovieIds = likedPostsSnapshot.docs
+        .map((doc) => doc.data()['movieId'] as String)
+        .toList();
 
-    // Popularity contribution (normalized to 0-10 scale)
-    final normalizedPopularity = min(movie.popularity / 20, 10.0); // Cap at 10
-    score += normalizedPopularity * 0.3; // 30% weight
+    // Step 4: Fetch a pool of recent posts
+    final recentPostsSnapshot = await _firestore
+        .collection('posts')
+        .orderBy('createdAt', descending: true)
+        .limit(100) // Fetch more than needed to have a good pool to score
+        .get();
 
-    // Recency contribution (0-10 scale)
-    try {
-      final year = int.tryParse(movie.year) ?? 0;
-      final currentYear = DateTime.now().year;
-      final yearDiff = currentYear - year;
-      final recencyScore = max(0, 10 - yearDiff);
-      score += recencyScore * 0.3; // 30% weight
-    } catch (e) {
-      // Ignore parsing errors
-    }
+    // Convert to Post objects
+    final List<Post> posts = recentPostsSnapshot.docs
+        .map((doc) => Post.fromJson(doc.data(), doc.id))
+        .where((post) => post.userId != userId) // Exclude own posts
+        .where((post) =>
+            !likedPostIds.contains(post.id)) // Exclude already liked posts
+        .toList();
 
-    return score;
-  }
+    // Step 5: Score each post
+    List<Map<String, dynamic>> scoredPosts = [];
 
-  // Get recommendations based on user's preferred genres
-  Future<List<Movie>> getGenreBasedRecommendations(String userId) async {
-    try {
-      // Get user's diary entries with high ratings
-      final diaryEntries = await _firestore
-          .collection('diary_entries')
-          .where('userId', isEqualTo: userId)
-          .where('rating', isGreaterThanOrEqualTo: 4.0)
-          .get();
+    for (var post in posts) {
+      double score = 0.0;
 
-      // Extract and analyze genre preferences
-      final genreFrequency = <int, int>{};
-      for (var doc in diaryEntries.docs) {
+      // Social score (posts from followed users get a boost)
+      if (following.contains(post.userId)) {
+        score += 0.3;
+      }
+
+      // Genre match score (will require an additional query to get movie info)
+      if (favoriteGenres.isNotEmpty) {
         try {
-          final movieId = doc.data()['movieId'] as String;
-          final movieDetails = await TMDBService.getMovieDetails(movieId);
+          final movieDoc =
+              await _firestore.collection('movies').doc(post.movieId).get();
+          if (movieDoc.exists) {
+            final List<String> movieGenres =
+                List<String>.from(movieDoc.data()?['genres'] ?? []);
 
-          if (movieDetails['genres'] != null) {
-            final genres = movieDetails['genres'] as List;
-            for (var genre in genres) {
-              final genreId = genre['id'] as int;
-              genreFrequency[genreId] = (genreFrequency[genreId] ?? 0) + 1;
+            // Calculate genre match percentage
+            int matchCount = 0;
+            for (var genre in movieGenres) {
+              if (favoriteGenres.contains(genre)) {
+                matchCount++;
+              }
+            }
+
+            if (matchCount > 0) {
+              score += (matchCount / movieGenres.length) * 0.4;
             }
           }
         } catch (e) {
-          print('Error processing movie details for genre: $e');
+          // Skip genre scoring if error occurs
+          print('Error fetching movie: $e');
         }
       }
 
-      // Sort genres by frequency
-      final sortedGenres = genreFrequency.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-
-      // Get top genre IDs
-      final topGenreIds =
-          sortedGenres.take(5).map((entry) => entry.key).toList();
-
-      // Fetch movies by top genres
-      final genreMovies = await TMDBService.getMoviesByGenres(topGenreIds);
-
-      return genreMovies.map((movieData) => Movie.fromJson(movieData)).toList();
-    } catch (e) {
-      print('Error getting genre-based recommendations: $e');
-      return [];
-    }
-  }
-
-  // Get recommendations based on users with similar taste
-  Future<List<Movie>> getSimilarTasteRecommendations(String userId) async {
-    try {
-      // Get the current user's ratings
-      final userRatings = await _firestore
-          .collection('diary_entries')
-          .where('userId', isEqualTo: userId)
-          .get();
-
-      // Map of movieId -> rating for the current user
-      final userRatingMap = <String, double>{};
-      for (var doc in userRatings.docs) {
-        final data = doc.data();
-        userRatingMap[data['movieId']] = (data['rating'] as num).toDouble();
+      // Recency score (newer posts score higher)
+      final ageInDays = DateTime.now().difference(post.createdAt).inDays;
+      if (ageInDays < 1) {
+        score += 0.2;
+      } else if (ageInDays < 3) {
+        score += 0.1;
       }
 
-      // Find similar users
-      final similarUserIds = await _findSimilarUsers(userId, userRatingMap);
+      // Popularity score (posts with more engagement score higher)
+      final engagementCount = post.likes.length + post.commentCount;
+      score += (engagementCount / 20)
+          .clamp(0.0, 0.1); // Max 0.1 for very popular posts
 
-      // Get recommendations from similar users
-      final recommendations = await _getMoviesFromSimilarUsers(
-          userId, similarUserIds, userRatingMap.keys.toList());
-
-      return recommendations;
-    } catch (e) {
-      print('Error getting similar-taste recommendations: $e');
-      return [];
+      scoredPosts.add({'post': post, 'score': score});
     }
+
+    // Sort by score (highest first)
+    scoredPosts.sort((a, b) => b['score'].compareTo(a['score']));
+
+    // Return top posts
+    return scoredPosts.take(limit).map((item) => item['post'] as Post).toList();
   }
 
-  // Find users with similar movie taste
-  Future<List<String>> _findSimilarUsers(
-      String userId, Map<String, double> userRatingMap) async {
-    final similarUserIds = <String>[];
+  // Get trending posts (based primarily on popularity)
+  Future<List<Post>> getTrendingPosts({int limit = 10}) async {
+    final userId = _auth.currentUser!.uid;
 
-    try {
-      // Get followers and following as initial candidates
-      final followers = await _friendService.getFollowers(userId).first;
-      final following = await _friendService.getFollowing(userId).first;
+    // Query posts with most likes in the past week
+    final DateTime oneWeekAgo =
+        DateTime.now().subtract(const Duration(days: 7));
+    final querySnapshot = await _firestore
+        .collection('posts')
+        .where('createdAt', isGreaterThan: oneWeekAgo)
+        .orderBy('createdAt', descending: true)
+        .get();
 
-      // Combine potential similar users
-      final potentialUsers = [
-        ...followers.map((f) => f.userId),
-        ...following.map((f) => f.friendId)
-      ];
-
-      // Calculate similarity for each potential user
-      for (final potentialUserId in potentialUsers) {
-        // Skip if it's the same user
-        if (potentialUserId == userId) continue;
-
-        // Get potential user's ratings
-        final potentialUserRatings = await _firestore
-            .collection('diary_entries')
-            .where('userId', isEqualTo: potentialUserId)
-            .get();
-
-        // Create rating map for potential user
-        final potentialUserRatingMap = <String, double>{};
-        for (var doc in potentialUserRatings.docs) {
-          final data = doc.data();
-          potentialUserRatingMap[data['movieId']] =
-              (data['rating'] as num).toDouble();
-        }
-
-        // Calculate similarity
-        final similarity =
-            _calculatePearsonCorrelation(userRatingMap, potentialUserRatingMap);
-
-        // Add to similar users if correlation is positive
-        if (similarity > 0.5) {
-          similarUserIds.add(potentialUserId);
-        }
-      }
-
-      return similarUserIds;
-    } catch (e) {
-      print('Error finding similar users: $e');
-      return [];
-    }
-  }
-
-  // Calculate Pearson correlation between two users' ratings
-  double _calculatePearsonCorrelation(
-      Map<String, double> user1Ratings, Map<String, double> user2Ratings) {
-    // Find common movies
-    final commonMovies = user1Ratings.keys
-        .where((movieId) => user2Ratings.containsKey(movieId))
+    // Convert to Post objects
+    final List<Post> posts = querySnapshot.docs
+        .map((doc) => Post.fromJson(doc.data(), doc.id))
+        .where((post) => post.userId != userId) // Exclude own posts
         .toList();
 
-    // Need at least 3 common movies for meaningful correlation
-    if (commonMovies.length < 3) return 0;
+    // Sort by engagement (likes + comments)
+    posts.sort((a, b) {
+      final aEngagement = a.likes.length + a.commentCount;
+      final bEngagement = b.likes.length + b.commentCount;
+      return bEngagement.compareTo(aEngagement);
+    });
 
-    // Calculate means
-    double sum1 = 0, sum2 = 0;
-    for (String movieId in commonMovies) {
-      sum1 += user1Ratings[movieId]!;
-      sum2 += user2Ratings[movieId]!;
-    }
-    final mean1 = sum1 / commonMovies.length;
-    final mean2 = sum2 / commonMovies.length;
-
-    // Calculate Pearson correlation
-    double numerator = 0;
-    double denominator1 = 0;
-    double denominator2 = 0;
-
-    for (String movieId in commonMovies) {
-      final dev1 = user1Ratings[movieId]! - mean1;
-      final dev2 = user2Ratings[movieId]! - mean2;
-      numerator += dev1 * dev2;
-      denominator1 += dev1 * dev1;
-      denominator2 += dev2 * dev2;
-    }
-
-    // Prevent division by zero
-    if (denominator1 == 0 || denominator2 == 0) return 0;
-
-    return numerator / (sqrt(denominator1) * sqrt(denominator2));
+    // Return top trending posts
+    return posts.take(limit).toList();
   }
 
-  // Get weekend watch recommendations based on recent viewing
-  Future<List<Movie>> getWeekendWatchRecommendations(String userId) async {
-    try {
-      // Get recent diary entries (last two weeks)
-      final twoWeeksAgo = DateTime.now().subtract(const Duration(days: 14));
-      final recentWatches = await _firestore
-          .collection('diary_entries')
-          .where('userId', isEqualTo: userId)
-          .where('watchedDate', isGreaterThan: Timestamp.fromDate(twoWeeksAgo))
-          .orderBy('watchedDate', descending: true)
-          .limit(5)
-          .get();
+  // Get friend activity
+  Future<List<Post>> getFriendActivityPosts({int limit = 10}) async {
+    final userId = _auth.currentUser!.uid;
 
-      // Get similar movies for recent watches
-      final recommendations = <Movie>[];
-      for (var doc in recentWatches.docs) {
-        final movieId = doc.data()['movieId'] as String;
-        final similarMovies = await TMDBService.getSimilarMovies(movieId);
+    // Get user's following
+    final followingSnapshot = await _firestore
+        .collection('friends')
+        .doc(userId)
+        .collection('following')
+        .get();
 
-        // Add top 2 similar movies
-        for (var i = 0; i < similarMovies.length && i < 2; i++) {
-          recommendations.add(Movie.fromJson(similarMovies[i]));
-        }
+    final List<String> following =
+        followingSnapshot.docs.map((doc) => doc.id).toList();
 
-        // Limit total recommendations
-        if (recommendations.length >= 10) break;
-      }
-
-      return recommendations;
-    } catch (e) {
-      print('Error getting weekend watch recommendations: $e');
+    if (following.isEmpty) {
       return [];
     }
+
+    // Get recent posts from followed users
+    final querySnapshot = await _firestore
+        .collection('posts')
+        .where('userId', whereIn: following)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .get();
+
+    // Convert to Post objects
+    return querySnapshot.docs
+        .map((doc) => Post.fromJson(doc.data(), doc.id))
+        .toList();
   }
 
-  // Helper method to get movies from similar users
-  Future<List<Movie>> _getMoviesFromSimilarUsers(String userId,
-      List<String> similarUserIds, List<String> watchedMovieIds) async {
-    try {
-      if (similarUserIds.isEmpty) return [];
+  // Track user interaction with recommendations for feedback
+  Future<void> trackRecommendationInteraction({
+    required String postId,
+    required String interactionType, // 'view', 'like', 'comment', 'ignore'
+  }) async {
+    final userId = _auth.currentUser!.uid;
 
-      // Get movies rated by similar users
-      final similarUserMovies = await _firestore
-          .collection('diary_entries')
-          .where('userId', whereIn: similarUserIds)
-          .where('rating', isGreaterThanOrEqualTo: 4.0)
-          .get();
-
-      // Create weighted ratings for movies
-      final weightedRatings = <String, _WeightedRating>{};
-
-      for (var doc in similarUserMovies.docs) {
-        final data = doc.data();
-        final movieId = data['movieId'] as String;
-        final rating = (data['rating'] as num).toDouble();
-        final ratingUserId = data['userId'] as String;
-
-        // Skip if already watched
-        if (watchedMovieIds.contains(movieId)) continue;
-
-        // Add to weighted ratings
-        if (!weightedRatings.containsKey(movieId)) {
-          weightedRatings[movieId] = _WeightedRating(movieId);
-        }
-
-        // Use a simple similarity weight (you could enhance this)
-        weightedRatings[movieId]!.addRating(rating, 1.0);
-      }
-
-      // Sort by weighted rating
-      final sortedMovies = weightedRatings.values.toList()
-        ..sort(
-            (a, b) => b.getWeightedRating().compareTo(a.getWeightedRating()));
-
-      // Get movie details
-      final recommendations = <Movie>[];
-      for (var weightedRating in sortedMovies) {
-        try {
-          final movieDetails =
-              await TMDBService.getMovieDetails(weightedRating.movieId);
-          recommendations.add(Movie.fromJson(movieDetails));
-
-          // Limit recommendations
-          if (recommendations.length >= 10) break;
-        } catch (e) {
-          print('Error fetching movie details: $e');
-        }
-      }
-
-      return recommendations;
-    } catch (e) {
-      print('Error getting movies from similar users: $e');
-      return [];
-    }
+    await _firestore.collection('userRecommendationFeedback').add({
+      'userId': userId,
+      'postId': postId,
+      'interactionType': interactionType,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
   }
 }
