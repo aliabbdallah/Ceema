@@ -8,14 +8,17 @@ import '../screens/movie_details_screen.dart';
 
 class MoodRecommendationsScreen extends StatefulWidget {
   final Mood mood;
+  final double intensity;
 
   const MoodRecommendationsScreen({
     Key? key,
     required this.mood,
+    this.intensity = 0.5,
   }) : super(key: key);
 
   @override
-  _MoodRecommendationsScreenState createState() => _MoodRecommendationsScreenState();
+  _MoodRecommendationsScreenState createState() =>
+      _MoodRecommendationsScreenState();
 }
 
 class _MoodRecommendationsScreenState extends State<MoodRecommendationsScreen> {
@@ -53,8 +56,11 @@ class _MoodRecommendationsScreenState extends State<MoodRecommendationsScreen> {
     });
 
     try {
-      final movies = await MoodRecommendationService.getMoviesByMood(widget.mood);
-      
+      final movies = await MoodRecommendationService.getMoviesByMood(
+        widget.mood,
+        intensity: widget.intensity,
+      );
+
       if (mounted) {
         setState(() {
           _recommendedMovies = movies;
@@ -86,7 +92,7 @@ class _MoodRecommendationsScreenState extends State<MoodRecommendationsScreen> {
 
   Widget _buildHeader() {
     final moodColor = _parseColor(widget.mood.color);
-    
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -132,14 +138,48 @@ class _MoodRecommendationsScreenState extends State<MoodRecommendationsScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          // Mood description
-          Text(
-            widget.mood.description,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 16,
-              color: Colors.white,
-            ),
+          // Mood description and intensity
+          Column(
+            children: [
+              Text(
+                widget.mood.description,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.speed,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Intensity: ${(widget.intensity * 100).round()}%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           // Genre tags
@@ -149,7 +189,8 @@ class _MoodRecommendationsScreenState extends State<MoodRecommendationsScreen> {
             runSpacing: 8,
             children: widget.mood.genreIds.map((genreId) {
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(16),
@@ -222,6 +263,8 @@ class _MoodRecommendationsScreenState extends State<MoodRecommendationsScreen> {
   }
 
   Widget _buildMovieCard(Movie movie) {
+    final moodColor = _parseColor(widget.mood.color);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 4,
@@ -235,31 +278,70 @@ class _MoodRecommendationsScreenState extends State<MoodRecommendationsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Movie poster
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                bottomLeft: Radius.circular(12),
-              ),
-              child: CachedNetworkImage(
-                imageUrl: movie.posterUrl,
-                width: 100,
-                height: 150,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  width: 100,
-                  height: 150,
-                  color: Colors.grey[300],
-                  child: const Center(
-                    child: CircularProgressIndicator(),
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    bottomLeft: Radius.circular(12),
+                  ),
+                  child: CachedNetworkImage(
+                    imageUrl: movie.posterUrl,
+                    width: 100,
+                    height: 150,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      width: 100,
+                      height: 150,
+                      color: Colors.grey[300],
+                      child: const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      width: 100,
+                      height: 150,
+                      color: Colors.grey[300],
+                      child: const Icon(Icons.error),
+                    ),
                   ),
                 ),
-                errorWidget: (context, url, error) => Container(
-                  width: 100,
-                  height: 150,
-                  color: Colors.grey[300],
-                  child: const Icon(Icons.error),
-                ),
-              ),
+                // Rating badge
+                if (movie.voteAverage > 0)
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black87,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.star,
+                            color: Colors.amber,
+                            size: 12,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            movie.voteAverage.toStringAsFixed(1),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
             ),
             // Movie details
             Expanded(
@@ -268,14 +350,51 @@ class _MoodRecommendationsScreenState extends State<MoodRecommendationsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      movie.title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            movie.title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (movie.popularity > 0)
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: moodColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.trending_up,
+                                  color: moodColor,
+                                  size: 12,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  movie.popularity.toStringAsFixed(0),
+                                  style: TextStyle(
+                                    color: moodColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(

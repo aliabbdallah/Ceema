@@ -1,3 +1,4 @@
+// Updated lib/services/tmdb_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -76,7 +77,8 @@ class TMDBService {
 
   static Future<Map<String, dynamic>> getMovieDetails(String movieId) async {
     final response = await http.get(
-      Uri.parse('$_baseUrl/movie/$movieId?api_key=$_apiKey'),
+      Uri.parse(
+          '$_baseUrl/movie/$movieId?api_key=$_apiKey&append_to_response=credits'),
     );
 
     if (response.statusCode == 200) {
@@ -89,6 +91,25 @@ class TMDBService {
       return jsonReader.convert(jsonString);
     } else {
       throw Exception('Failed to load movie details');
+    }
+  }
+
+  // New method to get movie credits specifically
+  static Future<Map<String, dynamic>> getMovieCredits(String movieId) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/movie/$movieId/credits?api_key=$_apiKey'),
+    );
+
+    if (response.statusCode == 200) {
+      // Use a more lenient approach to JSON parsing
+      final jsonString = response.body;
+      final jsonReader = JsonDecoder((key, value) {
+        // This is a custom reviver function that can handle malformed JSON
+        return value;
+      });
+      return jsonReader.convert(jsonString);
+    } else {
+      throw Exception('Failed to load movie credits');
     }
   }
 

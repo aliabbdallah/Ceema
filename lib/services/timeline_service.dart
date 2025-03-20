@@ -1,55 +1,397 @@
-// services/timeline_service.dart
+// lib/services/timeline_service.dart - Updated with movie recommendation algorithm
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/timeline_activity.dart';
 import '../models/movie.dart';
 import '../models/post.dart';
 import '../models/diary_entry.dart';
+import 'tmdb_service.dart';
 
 class TimelineService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  // Cache for movie details to reduce API calls
+  final Map<String, Map<String, dynamic>> _movieDetailsCache = {};
+
   // Get the personalized timeline for the current user
-  Stream<List<TimelineItem>> getPersonalizedTimeline() {
+  Stream<List<TimelineItem>> getPersonalizedTimeline() async* {
     final userId = _auth.currentUser!.uid;
 
-    return _getUserPreferredGenres(userId).asyncMap((preferredGenres) async {
-      final List<TimelineItem> timeline = [];
+    // Get user's movie preferences
+    final preferences = await _buildUserMovieProfile(userId);
 
-      // 1. Add friend posts (higher priority)
-      final friendPosts = await _getFriendsPosts(userId);
-      timeline.addAll(friendPosts);
+    // Get timeline items
+    List<TimelineItem> timeline = [];
 
-      // 2. Add personalized recommendations based on user preferences
-      final recommendations =
-          await _getRecommendations(userId, preferredGenres);
-      timeline.addAll(recommendations);
+    // 1. Add movie-based post recommendations (highest priority)
+    final recommendedPosts = await _getRecommendedPosts(userId, preferences);
+    timeline.addAll(recommendedPosts);
 
-      // 3. Add trending items in preferred genres
-      final trendingItems = await _getTrendingInGenres(preferredGenres);
-      timeline.addAll(trendingItems);
+    // 2. Add friend posts (high priority)
+    final friendPosts = await _getFriendsPosts(userId);
+    timeline.addAll(friendPosts);
 
-      // Sort the timeline by relevance score and then by timestamp
-      timeline.sort((a, b) {
-        // First sort by relevance (higher scores first)
-        final relevanceComparison =
-            b.relevanceScore.compareTo(a.relevanceScore);
-        if (relevanceComparison != 0) return relevanceComparison;
+    // 3. Add personalized recommendations based on user preferences
+    final recommendations = await _getRecommendations(
+        userId, preferences.favoriteGenres.keys.toList());
+    timeline.addAll(recommendations);
 
-        // Then by timestamp (newer items first)
-        return b.timestamp.compareTo(a.timestamp);
-      });
+    // 4. Add trending items in preferred genres
+    final trendingItems =
+        await _getTrendingInGenres(preferences.favoriteGenres.keys.toList());
+    timeline.addAll(trendingItems);
 
-      return timeline;
+    // Sort the timeline by relevance score and then by timestamp
+    timeline.sort((a, b) {
+      // First sort by relevance (higher scores first)
+      final relevanceComparison = b.relevanceScore.compareTo(a.relevanceScore);
+      if (relevanceComparison != 0) return relevanceComparison;
+
+      // Then by timestamp (newer items first)
+      return b.timestamp.compareTo(a.timestamp);
     });
+
+    // Rebalance timeline to ensure variety
+    timeline = _rebalanceTimeline(timeline);
+
+    yield timeline;
+  }
+
+  // Get recommended posts based on user's movie taste
+  Future<List<TimelineItem>> _getRecommendedPosts(
+      String userId, _UserMovieProfile userProfile) async {
+    final List<TimelineItem> result = [];
+
+    try {
+      // Get a pool of candidate posts (excluding user's own posts)
+      final recentPosts = await _firestore
+          .collection('posts')
+          .orderBy('createdAt', descending: true)
+          .limit(50)
+          .get();
+
+      final candidatePosts = recentPosts.docs
+          .map((doc) => Post.fromJson(doc.data(), doc.id))
+          .where((post) => post.userId != userId)
+          .toList();
+
+      // Score and sort posts based on relevance to user's taste
+      List<_ScoredPost> scoredPosts =
+          await _scorePosts(candidatePosts, userProfile);
+      scoredPosts.sort((a, b) => b.score.compareTo(a.score));
+
+      // Take top posts and convert to TimelineItems
+      for (var scoredPost in scoredPosts.take(10)) {
+        result.add(
+          TimelineItem(
+            id: 'recommended_post_${scoredPost.post.id}',
+            type: TimelineItemType.similarToLiked,
+            timestamp: scoredPost.post.createdAt,
+            data: {
+              'userId': scoredPost.post.userId,
+              'userName': scoredPost.post.userName,
+              'reason': _getRecommendationReason(scoredPost),
+            },
+            relevanceScore: scoredPost.score,
+            relevanceReason: _getRecommendationReason(scoredPost),
+            post: scoredPost.post,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error getting recommended posts: $e');
+    }
+
+    return result;
+  }
+
+  // Generate a recommendation reason based on the scored post
+  String _getRecommendationReason(_ScoredPost scoredPost) {
+    if (scoredPost.matchReason == 'genre') {
+      return 'Based on your genre preferences';
+    } else if (scoredPost.matchReason == 'director') {
+      return 'Director you might enjoy';
+    } else if (scoredPost.matchReason == 'actor') {
+      return 'Because you like similar actors';
+    } else if (scoredPost.matchReason == 'rating') {
+      return 'Highly rated by users like you';
+    } else if (scoredPost.matchReason == 'movie') {
+      return 'Because you liked similar movies';
+    } else {
+      return 'Recommended for you';
+    }
+  }
+
+  // Build a profile of the user's movie preferences
+  Future<_UserMovieProfile> _buildUserMovieProfile(String userId) async {
+    final profile = _UserMovieProfile();
+
+    try {
+      // 1. Get liked movies from diary entries
+      final diaryEntries = await _firestore
+          .collection('diary_entries')
+          .where('userId', isEqualTo: userId)
+          .where('rating',
+              isGreaterThanOrEqualTo: 3.5) // Consider 3.5+ as "liked"
+          .get();
+
+      // Extract movies the user likes
+      for (var doc in diaryEntries.docs) {
+        final movieId = doc.data()['movieId'] as String;
+        final rating = (doc.data()['rating'] as num).toDouble();
+
+        profile.likedMovieIds.add(movieId);
+
+        // The higher the rating, the more weight we give to this movie's attributes
+        final weight = (rating - 2.5) / 2.5; // Scale from 0 to 1
+
+        // Get movie details (with caching)
+        final movieDetails = await _getMovieDetails(movieId);
+
+        // Process genres
+        if (movieDetails.containsKey('genres')) {
+          for (var genre in movieDetails['genres'] as List) {
+            final genreId = genre['id'].toString();
+            profile.addGenre(genreId, weight);
+          }
+        }
+
+        // Process directors and actors
+        if (movieDetails.containsKey('credits')) {
+          // Directors
+          if (movieDetails['credits'].containsKey('crew')) {
+            final directors = (movieDetails['credits']['crew'] as List)
+                .where((crew) => crew['job'] == 'Director');
+
+            for (var director in directors) {
+              final directorId = director['id'].toString();
+              profile.addDirector(directorId, weight);
+            }
+          }
+
+          // Main cast (top 5 actors)
+          if (movieDetails['credits'].containsKey('cast')) {
+            final cast = (movieDetails['credits']['cast'] as List).take(5);
+
+            for (var actor in cast) {
+              final actorId = actor['id'].toString();
+              profile.addActor(actorId, weight);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error building user movie profile: $e');
+    }
+
+    return profile;
+  }
+
+  // Score posts based on relevance to user's movie preferences
+  Future<List<_ScoredPost>> _scorePosts(
+      List<Post> posts, _UserMovieProfile userProfile) async {
+    final scoredPosts = <_ScoredPost>[];
+
+    for (var post in posts) {
+      // Skip posts about movies the user has explicitly disliked
+      if (userProfile.dislikedMovieIds.contains(post.movieId)) {
+        continue;
+      }
+
+      double score = 0.0;
+      String matchReason = '';
+
+      // 1. Base relevance score
+      score += 0.1; // Every post starts with a small base score
+
+      // 2. If the user already watched and liked this movie, boost the score
+      if (userProfile.likedMovieIds.contains(post.movieId)) {
+        score +=
+            0.7; // Big boost for posts about movies the user explicitly liked
+        matchReason = 'movie';
+      }
+
+      // 3. Get movie details to analyze genre, director, cast relevance
+      final movieDetails = await _getMovieDetails(post.movieId);
+
+      // 4. Relevance based on genres
+      if (movieDetails.containsKey('genres')) {
+        double genreScore = 0;
+        for (var genre in movieDetails['genres'] as List) {
+          final genreId = genre['id'].toString();
+
+          // Check if this is a genre the user likes
+          if (userProfile.favoriteGenres.containsKey(genreId)) {
+            genreScore += 0.15 * userProfile.favoriteGenres[genreId]!;
+          }
+        }
+
+        // If genre matching is the strongest factor so far
+        if (genreScore > 0.15 &&
+            (matchReason.isEmpty || score < genreScore + 0.1)) {
+          matchReason = 'genre';
+        }
+
+        score += genreScore;
+      }
+
+      // 5. Relevance based on directors
+      if (movieDetails.containsKey('credits') &&
+          movieDetails['credits'].containsKey('crew')) {
+        final directors = (movieDetails['credits']['crew'] as List)
+            .where((crew) => crew['job'] == 'Director');
+
+        double directorScore = 0;
+        for (var director in directors) {
+          final directorId = director['id'].toString();
+
+          // Check if this is a director the user likes
+          if (userProfile.favoriteDirectors.containsKey(directorId)) {
+            directorScore += 0.2 * userProfile.favoriteDirectors[directorId]!;
+          }
+        }
+
+        // If director matching is the strongest factor so far
+        if (directorScore > 0.2 &&
+            (matchReason.isEmpty || score < directorScore + 0.1)) {
+          matchReason = 'director';
+        }
+
+        score += directorScore;
+      }
+
+      // 6. Relevance based on actors
+      if (movieDetails.containsKey('credits') &&
+          movieDetails['credits'].containsKey('cast')) {
+        final cast = (movieDetails['credits']['cast'] as List).take(5);
+
+        double actorScore = 0;
+        for (var actor in cast) {
+          final actorId = actor['id'].toString();
+
+          // Check if this is an actor the user likes
+          if (userProfile.favoriteActors.containsKey(actorId)) {
+            actorScore += 0.15 * userProfile.favoriteActors[actorId]!;
+          }
+        }
+
+        // If actor matching is the strongest factor so far
+        if (actorScore > 0.15 &&
+            (matchReason.isEmpty || score < actorScore + 0.1)) {
+          matchReason = 'actor';
+        }
+
+        score += actorScore;
+      }
+
+      // 7. Boost for posts with good ratings
+      if (post.rating > 0) {
+        double ratingScore = 0;
+        // Posts with ratings between 3-5 get a boost
+        if (post.rating >= 3) {
+          ratingScore = 0.1 * (post.rating / 5);
+        }
+
+        if (ratingScore > 0.1 &&
+            (matchReason.isEmpty || score < ratingScore + 0.2)) {
+          matchReason = 'rating';
+        }
+
+        score += ratingScore;
+      }
+
+      // 8. Recency boost - favor newer posts
+      final ageInDays = DateTime.now().difference(post.createdAt).inDays;
+      if (ageInDays < 7) {
+        score += 0.1 *
+            (1 - (ageInDays / 7)); // Up to 0.1 boost for very recent posts
+      }
+
+      // Add to scored posts if relevance is high enough
+      if (score > 0.3) {
+        scoredPosts.add(_ScoredPost(post, score, matchReason));
+      }
+    }
+
+    return scoredPosts;
+  }
+
+  // Get movie details with caching
+  Future<Map<String, dynamic>> _getMovieDetails(String movieId) async {
+    if (_movieDetailsCache.containsKey(movieId)) {
+      return _movieDetailsCache[movieId]!;
+    }
+
+    try {
+      // Get detailed info including credits
+      final details = await TMDBService.getMovieDetails(movieId);
+
+      // Cache the result
+      _movieDetailsCache[movieId] = details;
+      return details;
+    } catch (e) {
+      print('Error getting movie details for $movieId: $e');
+      return {}; // Return empty map on error
+    }
+  }
+
+  // Rebalance timeline to ensure variety
+  List<TimelineItem> _rebalanceTimeline(List<TimelineItem> originalTimeline) {
+    if (originalTimeline.length <= 5) return originalTimeline;
+
+    // Categorize items
+    final posts = originalTimeline
+        .where((item) =>
+            item.type == TimelineItemType.friendPost ||
+            item.type == TimelineItemType.similarToLiked)
+        .toList();
+
+    final recommendations = originalTimeline
+        .where((item) =>
+            item.type == TimelineItemType.recommendation ||
+            item.type == TimelineItemType.newReleaseGenre)
+        .toList();
+
+    final trending = originalTimeline
+        .where((item) => item.type == TimelineItemType.trendingMovie)
+        .toList();
+
+    // Create a new timeline with intermixed content
+    final rebalanced = <TimelineItem>[];
+    int postIndex = 0;
+    int recIndex = 0;
+    int trendIndex = 0;
+
+    // Add items in a 3:1:1 ratio (posts:recommendations:trending)
+    while (rebalanced.length < originalTimeline.length) {
+      // Add up to 3 posts
+      for (int i = 0; i < 3 && postIndex < posts.length; i++) {
+        rebalanced.add(posts[postIndex++]);
+        if (rebalanced.length >= originalTimeline.length) break;
+      }
+
+      // Add 1 recommendation if available
+      if (recIndex < recommendations.length &&
+          rebalanced.length < originalTimeline.length) {
+        rebalanced.add(recommendations[recIndex++]);
+      }
+
+      // Add 1 trending item if available
+      if (trendIndex < trending.length &&
+          rebalanced.length < originalTimeline.length) {
+        rebalanced.add(trending[trendIndex++]);
+      }
+    }
+
+    return rebalanced;
   }
 
   // Get timeline filtered by specific genre
-  Stream<List<TimelineItem>> getGenreTimeline(String genre) {
+  Stream<List<TimelineItem>> getGenreTimeline(String genre) async* {
     final userId = _auth.currentUser!.uid;
-
-    return Stream.fromFuture(_getItemsByGenre(userId, genre));
+    yield await _getItemsByGenre(userId, genre);
   }
 
   // Helper method to get user's preferred genres
@@ -172,7 +514,7 @@ class TimelineService {
             'reason': 'Based on your preferences',
           },
           relevanceScore:
-              0.9, // Personalized recommendations are high relevance
+              0.6, // Personalized recommendations are high relevance
           relevanceReason: 'Based on movies you\'ve enjoyed',
           movie: movie,
         );
@@ -213,7 +555,7 @@ class TimelineService {
             'movieId': movie.id,
             'movieTitle': movie.title,
           },
-          relevanceScore: 0.6, // Trending items are medium relevance
+          relevanceScore: 0.5, // Trending items are medium relevance
           relevanceReason: 'Trending now',
           movie: movie,
         );
@@ -294,4 +636,47 @@ class TimelineService {
       'movieId': movie?.id,
     });
   }
+}
+
+// Helper class to represent a user's movie preferences
+class _UserMovieProfile {
+  // Movies the user has watched and liked
+  final Set<String> likedMovieIds = {};
+
+  // Movies the user has explicitly disliked
+  final Set<String> dislikedMovieIds = {};
+
+  // Genres the user likes with weights
+  final Map<String, double> favoriteGenres = {};
+
+  // Directors the user likes with weights
+  final Map<String, double> favoriteDirectors = {};
+
+  // Actors the user likes with weights
+  final Map<String, double> favoriteActors = {};
+
+  // Add a genre with weight
+  void addGenre(String genreId, double weight) {
+    favoriteGenres[genreId] = (favoriteGenres[genreId] ?? 0) + weight;
+  }
+
+  // Add a director with weight
+  void addDirector(String directorId, double weight) {
+    favoriteDirectors[directorId] =
+        (favoriteDirectors[directorId] ?? 0) + weight;
+  }
+
+  // Add an actor with weight
+  void addActor(String actorId, double weight) {
+    favoriteActors[actorId] = (favoriteActors[actorId] ?? 0) + weight;
+  }
+}
+
+// Helper class to represent a post with its relevance score
+class _ScoredPost {
+  final Post post;
+  final double score;
+  final String matchReason;
+
+  _ScoredPost(this.post, this.score, this.matchReason);
 }

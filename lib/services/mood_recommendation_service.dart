@@ -1,93 +1,173 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/mood.dart';
 import '../models/movie.dart';
 
 class MoodRecommendationService {
-  static const String _apiKey = '4ae207526acb81363b703e810d265acf'; // Same as TMDBService
-  static const String _baseUrl = 'https://api.themoviedb.org/3';
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Get movies based on a specific mood
-  static Future<List<Movie>> getMoviesByMood(Mood mood, {int limit = 20}) async {
+  // Save user's mood selection with intensity
+  static Future<void> saveUserMoodSelection(
+    String userId,
+    String moodId, {
+    double intensity = 0.5,
+  }) async {
     try {
-      // Convert genre IDs to comma-separated string
-      final String genreIds = mood.genreIds.join(',');
-      
-      // Get movies by genres associated with the mood
-      final response = await http.get(
-        Uri.parse(
-          '$_baseUrl/discover/movie?api_key=$_apiKey&with_genres=$genreIds&sort_by=popularity.desc&page=1',
-        ),
-      );
+      final userMoodsRef =
+          _firestore.collection('users').doc(userId).collection('moods');
 
-      if (response.statusCode == 200) {
-        // Use a more lenient approach to JSON parsing
-        final jsonString = response.body;
-        final jsonReader = JsonDecoder((key, value) {
-          // This is a custom reviver function that can handle malformed JSON
-          return value;
-        });
-        final data = jsonReader.convert(jsonString);
-        final results = List<Map<String, dynamic>>.from(data['results']);
-        
-        // Convert to Movie objects and limit the number of results
-        final movies = results
-            .map((data) => Movie.fromJson(data))
-            .take(limit)
-            .toList();
-        
-        return movies;
-      } else {
-        throw Exception('Failed to load mood-based movies: ${response.statusCode}');
+      // Add new mood entry
+      await userMoodsRef.add({
+        'moodId': moodId,
+        'intensity': intensity,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      // Update user's mood history (keep last 10)
+      final querySnapshot =
+          await userMoodsRef.orderBy('timestamp', descending: true).get();
+
+      if (querySnapshot.docs.length > 10) {
+        final docsToDelete = querySnapshot.docs.sublist(10);
+        for (var doc in docsToDelete) {
+          await doc.reference.delete();
+        }
       }
     } catch (e) {
-      throw Exception('Error getting mood-based movies: $e');
+      print('Error saving mood selection: $e');
+      rethrow;
     }
   }
 
-  /// Get a list of all available genres from TMDB
+  // Get user's recent moods
+  static Future<List<Map<String, dynamic>>> getRecentMoods(
+      String userId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('moods')
+          .orderBy('timestamp', descending: true)
+          .limit(10)
+          .get();
+
+      return querySnapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'moodId': data['moodId'],
+          'intensity': data['intensity'] ?? 0.5,
+          'timestamp': data['timestamp'],
+        };
+      }).toList();
+    } catch (e) {
+      print('Error getting recent moods: $e');
+      return [];
+    }
+  }
+
+  // Get movie recommendations based on mood and intensity
+  static Future<List<Movie>> getMoviesByMood(
+    Mood mood, {
+    double intensity = 0.5,
+  }) async {
+    try {
+      // Get base recommendations from TMDB API
+      final List<Movie> baseRecommendations = await _getMoviesByGenres(
+        mood.genreIds,
+        limit: 20,
+      );
+
+      // Apply intensity-based filtering
+      final adjustedRecommendations = _adjustRecommendationsByIntensity(
+        baseRecommendations,
+        intensity,
+      );
+
+      return adjustedRecommendations;
+    } catch (e) {
+      print('Error getting movies by mood: $e');
+      rethrow;
+    }
+  }
+
+  // Helper method to get movies by genre IDs
+  static Future<List<Movie>> _getMoviesByGenres(
+    List<int> genreIds, {
+    int limit = 20,
+  }) async {
+    // Implementation depends on your movie data source (e.g., TMDB API)
+    // This is a placeholder that should be replaced with actual API calls
+    return [];
+  }
+
+  // Helper method to adjust recommendations based on intensity
+  static List<Movie> _adjustRecommendationsByIntensity(
+    List<Movie> movies,
+    double intensity,
+  ) {
+    // Sort movies by how well they match the intensity
+    movies.sort((a, b) {
+      // Example scoring based on movie attributes that indicate intensity
+      // (e.g., vote average, popularity, release date)
+      final scoreA = _calculateIntensityScore(a, intensity);
+      final scoreB = _calculateIntensityScore(b, intensity);
+      return scoreB.compareTo(scoreA);
+    });
+
+    // Return top matches
+    return movies.take(10).toList();
+  }
+
+  // Helper method to calculate how well a movie matches the desired intensity
+  static double _calculateIntensityScore(Movie movie, double targetIntensity) {
+    // Example scoring logic (replace with your own algorithm)
+    // This could consider factors like:
+    // - Movie rating (higher ratings might correlate with stronger emotional impact)
+    // - Release date (newer movies might have more intense effects)
+    // - Popularity (more popular movies might be more engaging)
+    // - Genre-specific factors
+
+    double score = 0.0;
+
+    // Rating contribution (0-10 scale)
+    final ratingScore = (movie.voteAverage / 10.0) * targetIntensity;
+    score += ratingScore * 0.4; // 40% weight
+
+    // Popularity contribution (normalized to 0-1)
+    final popularityScore = (movie.popularity / 100.0) * targetIntensity;
+    score += popularityScore * 0.3; // 30% weight
+
+    // Recency contribution
+    final yearDiff = DateTime.now().year - int.parse(movie.year);
+    final recencyScore =
+        (1 - (yearDiff / 50).clamp(0.0, 1.0)) * targetIntensity;
+    score += recencyScore * 0.3; // 30% weight
+
+    return score;
+  }
+
+  // Get all available genres
   static Future<Map<int, String>> getGenres() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/genre/movie/list?api_key=$_apiKey'),
-      );
-
-      if (response.statusCode == 200) {
-        // Use a more lenient approach to JSON parsing
-        final jsonString = response.body;
-        final jsonReader = JsonDecoder((key, value) {
-          // This is a custom reviver function that can handle malformed JSON
-          return value;
-        });
-        final data = jsonReader.convert(jsonString);
-        final genres = Map<int, String>.fromEntries(
-          (data['genres'] as List).map(
-            (genre) => MapEntry(genre['id'] as int, genre['name'] as String),
-          ),
-        );
-        return genres;
-      } else {
-        throw Exception('Failed to load genres: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Error getting genres: $e');
-    }
-  }
-
-  /// Save user mood preference to Firestore (for future personalization)
-  static Future<void> saveUserMoodSelection(String userId, String moodId) async {
-    // This would typically save to Firestore, but we'll leave it as a placeholder
-    // for now since it would require additional Firebase setup
-    print('Saving mood $moodId for user $userId');
-    
-    // Implementation would look something like:
-    // await FirebaseFirestore.instance
-    //     .collection('users')
-    //     .doc(userId)
-    //     .collection('moods')
-    //     .add({
-    //       'moodId': moodId,
-    //       'timestamp': FieldValue.serverTimestamp(),
-    //     });
+    // This should be replaced with actual genre fetching from your movie data source
+    return {
+      28: 'Action',
+      12: 'Adventure',
+      16: 'Animation',
+      35: 'Comedy',
+      80: 'Crime',
+      99: 'Documentary',
+      18: 'Drama',
+      10751: 'Family',
+      14: 'Fantasy',
+      36: 'History',
+      27: 'Horror',
+      10402: 'Music',
+      9648: 'Mystery',
+      10749: 'Romance',
+      878: 'Science Fiction',
+      10770: 'TV Movie',
+      53: 'Thriller',
+      10752: 'War',
+      37: 'Western',
+    };
   }
 }

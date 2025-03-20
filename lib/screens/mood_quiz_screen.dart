@@ -13,12 +13,17 @@ class MoodQuizScreen extends StatefulWidget {
   _MoodQuizScreenState createState() => _MoodQuizScreenState();
 }
 
-class _MoodQuizScreenState extends State<MoodQuizScreen> with SingleTickerProviderStateMixin {
+class _MoodQuizScreenState extends State<MoodQuizScreen>
+    with SingleTickerProviderStateMixin {
   final List<Mood> _moods = MoodData.getMoods();
   String? _selectedMoodId;
+  double _moodIntensity = 0.5; // Default intensity
   bool _isLoading = false;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  List<Map<String, dynamic>> _recentMoods = []; // Store recent mood selections
 
   @override
   void initState() {
@@ -27,19 +32,49 @@ class _MoodQuizScreenState extends State<MoodQuizScreen> with SingleTickerProvid
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
+
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: Curves.easeInOut,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
       ),
     );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.2),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.2, 0.8, curve: Curves.easeOutCubic),
+      ),
+    );
+
     _animationController.forward();
+    _loadRecentMoods();
   }
 
   @override
   void dispose() {
     _animationController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadRecentMoods() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        final recentMoods =
+            await MoodRecommendationService.getRecentMoods(user.uid);
+        if (mounted) {
+          setState(() {
+            _recentMoods = recentMoods;
+          });
+        }
+      } catch (e) {
+        print('Error loading recent moods: $e');
+      }
+    }
   }
 
   void _selectMood(String moodId) {
@@ -65,13 +100,14 @@ class _MoodQuizScreenState extends State<MoodQuizScreen> with SingleTickerProvid
 
     try {
       final selectedMood = MoodData.getMoodById(_selectedMoodId!);
-      
-      // Save user's mood selection for future personalization
+
+      // Save user's mood selection with intensity for future personalization
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         await MoodRecommendationService.saveUserMoodSelection(
-          user.uid, 
+          user.uid,
           _selectedMoodId!,
+          intensity: _moodIntensity,
         );
       }
 
@@ -79,7 +115,10 @@ class _MoodQuizScreenState extends State<MoodQuizScreen> with SingleTickerProvid
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => MoodRecommendationsScreen(mood: selectedMood),
+            builder: (context) => MoodRecommendationsScreen(
+              mood: selectedMood,
+              intensity: _moodIntensity,
+            ),
           ),
         );
       }
@@ -101,6 +140,143 @@ class _MoodQuizScreenState extends State<MoodQuizScreen> with SingleTickerProvid
     }
   }
 
+  Widget _buildRecentMoods() {
+    if (_recentMoods.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      height: 60,
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Recent Moods',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: _recentMoods.map((moodData) {
+                final mood = MoodData.getMoodById(moodData['moodId']);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: Tooltip(
+                    message:
+                        '${mood.name} (${(moodData['intensity'] * 100).round()}%)',
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          _selectedMoodId = mood.id;
+                          _moodIntensity = moodData['intensity'] ?? 0.5;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _parseColor(mood.color).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              mood.emoji,
+                              style: const TextStyle(fontSize: 16),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              mood.name,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIntensitySlider() {
+    if (_selectedMoodId == null) return const SizedBox.shrink();
+
+    final selectedMood = MoodData.getMoodById(_selectedMoodId!);
+    final moodColor = _parseColor(selectedMood.color);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Intensity',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${(_moodIntensity * 100).round()}%',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: moodColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SliderTheme(
+            data: SliderThemeData(
+              activeTrackColor: moodColor,
+              inactiveTrackColor: moodColor.withOpacity(0.2),
+              thumbColor: moodColor,
+              overlayColor: moodColor.withOpacity(0.2),
+              trackHeight: 4,
+            ),
+            child: Slider(
+              value: _moodIntensity,
+              onChanged: (value) {
+                setState(() {
+                  _moodIntensity = value;
+                });
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Helper function to parse color
+  Color _parseColor(String hexColor) {
+    try {
+      hexColor = hexColor.replaceAll('#', '');
+      if (hexColor.length == 6) {
+        hexColor = 'FF$hexColor';
+      }
+      return Color(int.parse(hexColor, radix: 16));
+    } catch (e) {
+      return Colors.blue;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -113,34 +289,45 @@ class _MoodQuizScreenState extends State<MoodQuizScreen> with SingleTickerProvid
           slivers: [
             // Header with animation
             SliverToBoxAdapter(
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: Container(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      SizedBox(
-                        height: 120,
-                        child: Lottie.asset(
-                          'assets/animations/mood_animation.json', // Mood animation
-                          repeat: true,
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          height: 150,
+                          child: Lottie.asset(
+                            'assets/animations/mood_animation.json',
+                            repeat: true,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Select your current mood and we\'ll recommend movies that match how you\'re feeling',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey,
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Select your current mood and we\'ll recommend movies that match how you\'re feeling',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-            
+
+            // Recent moods section
+            SliverToBoxAdapter(
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: _buildRecentMoods(),
+              ),
+            ),
+
             // Mood grid
             SliverPadding(
               padding: const EdgeInsets.all(16),
@@ -154,12 +341,15 @@ class _MoodQuizScreenState extends State<MoodQuizScreen> with SingleTickerProvid
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final mood = _moods[index];
-                    return FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: MoodCard(
-                        mood: mood,
-                        isSelected: _selectedMoodId == mood.id,
-                        onTap: () => _selectMood(mood.id),
+                    return SlideTransition(
+                      position: _slideAnimation,
+                      child: FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: MoodCard(
+                          mood: mood,
+                          isSelected: _selectedMoodId == mood.id,
+                          onTap: () => _selectMood(mood.id),
+                        ),
                       ),
                     );
                   },
@@ -167,7 +357,15 @@ class _MoodQuizScreenState extends State<MoodQuizScreen> with SingleTickerProvid
                 ),
               ),
             ),
-            
+
+            // Intensity slider
+            SliverToBoxAdapter(
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: _buildIntensitySlider(),
+              ),
+            ),
+
             // Get recommendations button
             SliverToBoxAdapter(
               child: Padding(

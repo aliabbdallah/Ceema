@@ -112,7 +112,7 @@ class _TrendingMovieRowState extends State<TrendingMovieRow> {
 
         // Movie row
         SizedBox(
-          height: 200,
+          height: 220, // Increased height to accommodate metrics
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : _errorMessage != null
@@ -153,7 +153,7 @@ class _TrendingMovieRowState extends State<TrendingMovieRow> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Movie poster
+            // Movie poster with metrics
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Stack(
@@ -173,6 +173,76 @@ class _TrendingMovieRowState extends State<TrendingMovieRow> {
                       );
                     },
                   ),
+                  // Vote average badge
+                  if (movie.voteAverage > 0)
+                    Positioned(
+                      top: 4,
+                      left: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black87,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.star,
+                              color: Colors.amber,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              movie.voteAverage.toStringAsFixed(1),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  // Popularity badge
+                  if (movie.popularity > 0)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black87,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.trending_up,
+                              color: Colors.greenAccent,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              movie.popularity.toStringAsFixed(0),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   // Gradient overlay for better text visibility
                   Positioned(
                     bottom: 0,
@@ -196,18 +266,31 @@ class _TrendingMovieRowState extends State<TrendingMovieRow> {
               ),
             ),
 
-            // Movie title
+            // Movie title and year
             Padding(
               padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                movie.title,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: colorScheme.onBackground,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    movie.title,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: colorScheme.onBackground,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    movie.year,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

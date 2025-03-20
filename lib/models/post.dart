@@ -77,7 +77,7 @@ class Post {
       likes: List<String>.from(json['likes'] ?? []),
       commentCount: json['commentCount'] ?? 0,
       shares: List<String>.from(json['shares'] ?? []),
-      rating: json['rating'] ?? 0,
+      rating: (json['rating'] ?? 0).toDouble(),
     );
   }
 }

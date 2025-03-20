@@ -1,13 +1,17 @@
+// Modified lib/services/diary_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/diary_entry.dart';
 import '../models/movie.dart';
+import '../services/automatic_preference_service.dart';
 import 'post_service.dart';
 
 class DiaryService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final PostService _postService = PostService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final AutomaticPreferenceService _automaticPreferenceService =
+      AutomaticPreferenceService();
 
   // Create a new diary entry
   Future<void> addDiaryEntry({
@@ -52,6 +56,27 @@ class DiaryService {
           rating: rating,
         );
       }
+    }
+
+    // Automatically update user preferences based on this entry
+    await _processEntryForPreferences(movie.id, rating);
+  }
+
+  // Process this entry to update preferences
+  Future<void> _processEntryForPreferences(
+      String movieId, double rating) async {
+    try {
+      // This is a simpler approach that regenerates all preferences
+      // It's more resource-intensive but ensures consistency
+      await _automaticPreferenceService.generateAutomaticPreferences();
+
+      // Alternative: Process just this movie for preferences
+      // This would be more efficient but requires duplicating logic
+      // from AutomaticPreferenceService
+    } catch (e) {
+      print('Error processing entry for preferences: $e');
+      // Don't throw the error - we don't want to fail the diary entry
+      // if preference generation fails
     }
   }
 
@@ -118,12 +143,30 @@ class DiaryService {
           'rating': rating,
         });
       }
+
+      // If rating was updated, update preferences
+      await _processEntryForPreferences(movieId, rating);
     }
   }
 
   // Delete a diary entry
   Future<void> deleteDiaryEntry(String entryId) async {
-    await _firestore.collection('diary_entries').doc(entryId).delete();
+    // Get the movie ID before deleting
+    final diaryDoc =
+        await _firestore.collection('diary_entries').doc(entryId).get();
+
+    if (diaryDoc.exists) {
+      final data = diaryDoc.data()!;
+      final movieId = data['movieId'] as String;
+
+      // Delete the entry
+      await _firestore.collection('diary_entries').doc(entryId).delete();
+
+      // Update preferences after deletion
+      await _automaticPreferenceService.generateAutomaticPreferences();
+    } else {
+      await _firestore.collection('diary_entries').doc(entryId).delete();
+    }
   }
 
   // Get diary statistics
@@ -151,5 +194,15 @@ class DiaryService {
       'totalRewatches': totalRewatches,
       'totalFavorites': totalFavorites,
     };
+  }
+
+  // Generate preferences for a user based on their diary entries
+  Future<void> generateUserPreferences(String userId) async {
+    try {
+      await _automaticPreferenceService.generateAutomaticPreferences();
+    } catch (e) {
+      print('Error generating user preferences: $e');
+      rethrow;
+    }
   }
 }

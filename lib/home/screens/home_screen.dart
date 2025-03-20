@@ -1,9 +1,11 @@
+// Modified lib/home/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import '../components/feed_screen.dart';
 import 'package:ceema/screens/mood_entry_point_screen.dart';
 import 'package:ceema/screens/diary_screen.dart';
 import 'package:ceema/screens/profile_screen.dart';
 import 'package:ceema/screens/watchlist_screen.dart';
+import 'package:ceema/services/automatic_preference_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -19,6 +21,9 @@ class _HomeScreenState extends State<HomeScreen>
   late Animation<double> _fadeAnimation;
   int _currentTab = 0;
   bool _isPageChanging = false;
+  final AutomaticPreferenceService _automaticPreferenceService =
+      AutomaticPreferenceService();
+  bool _isInitializing = true;
 
   @override
   void initState() {
@@ -34,6 +39,26 @@ class _HomeScreenState extends State<HomeScreen>
       ),
     );
     _animationController.forward();
+
+    // Initialize user preferences automatically on app start
+    _initializePreferences();
+  }
+
+  Future<void> _initializePreferences() async {
+    try {
+      // Generate preferences based on user's diary entries
+      await _automaticPreferenceService.generateAutomaticPreferences();
+    } catch (e) {
+      print('Error initializing preferences: $e');
+      // Don't show error to user - just log it
+    } finally {
+      // Mark initialization as complete
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+        });
+      }
+    }
   }
 
   @override
@@ -75,21 +100,33 @@ class _HomeScreenState extends State<HomeScreen>
     ];
 
     return Scaffold(
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: PageView(
-          controller: _pageController,
-          physics: _isPageChanging
-              ? const NeverScrollableScrollPhysics()
-              : const AlwaysScrollableScrollPhysics(),
-          onPageChanged: (index) {
-            if (!_isPageChanging) {
-              setState(() => _currentTab = index);
-            }
-          },
-          children: screens,
-        ),
-      ),
+      // Show loading indicator if preferences are being initialized
+      body: _isInitializing
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Personalizing your experience...'),
+                ],
+              ),
+            )
+          : FadeTransition(
+              opacity: _fadeAnimation,
+              child: PageView(
+                controller: _pageController,
+                physics: _isPageChanging
+                    ? const NeverScrollableScrollPhysics()
+                    : const AlwaysScrollableScrollPhysics(),
+                onPageChanged: (index) {
+                  if (!_isPageChanging) {
+                    setState(() => _currentTab = index);
+                  }
+                },
+                children: screens,
+              ),
+            ),
       bottomNavigationBar: NavigationBar(
         elevation: 8,
         backgroundColor: colorScheme.surface,

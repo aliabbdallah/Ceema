@@ -64,17 +64,22 @@ class RecommendationService {
 
   // Calculate a comprehensive relevance score for a movie
   double _calculateRelevanceScore(Movie movie) {
-    // This is a simplified scoring mechanism
     double score = 0;
 
-    // Base score based on movie rating
-    score += (movie.rating ?? 0) * 2;
+    // Vote average contribution (0-10 scale)
+    score += (movie.voteAverage) * 0.4; // 40% weight
 
-    // Bonus for newer movies
+    // Popularity contribution (normalized to 0-10 scale)
+    final normalizedPopularity = min(movie.popularity / 20, 10.0); // Cap at 10
+    score += normalizedPopularity * 0.3; // 30% weight
+
+    // Recency contribution (0-10 scale)
     try {
       final year = int.tryParse(movie.year) ?? 0;
       final currentYear = DateTime.now().year;
-      score += max(0, 5 - (currentYear - year));
+      final yearDiff = currentYear - year;
+      final recencyScore = max(0, 10 - yearDiff);
+      score += recencyScore * 0.3; // 30% weight
     } catch (e) {
       // Ignore parsing errors
     }

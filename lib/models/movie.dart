@@ -4,7 +4,8 @@ class Movie {
   final String posterUrl;
   final String year;
   final String overview;
-  final double rating;
+  final double voteAverage;
+  final double popularity;
 
   Movie({
     required this.id,
@@ -12,7 +13,8 @@ class Movie {
     required this.posterUrl,
     required this.year,
     required this.overview,
-    this.rating = 0.0,
+    this.voteAverage = 0.0,
+    this.popularity = 0.0,
   });
 
   factory Movie.fromJson(Map<String, dynamic> json) {
@@ -32,11 +34,18 @@ class Movie {
         ? 'https://image.tmdb.org/t/p/w500$posterPath'
         : 'https://via.placeholder.com/500x750.png?text=No+Poster';
 
-    // Extract rating (vote_average from TMDB)
-    final rating = json['vote_average'] != null
+    // Extract vote average from TMDB
+    final voteAverage = json['vote_average'] != null
         ? (json['vote_average'] is int
             ? (json['vote_average'] as int).toDouble()
             : json['vote_average'] as double)
+        : 0.0;
+
+    // Extract popularity from TMDB
+    final popularity = json['popularity'] != null
+        ? (json['popularity'] is int
+            ? (json['popularity'] as int).toDouble()
+            : json['popularity'] as double)
         : 0.0;
 
     return Movie(
@@ -45,7 +54,8 @@ class Movie {
       posterUrl: posterUrl,
       year: year,
       overview: json['overview'] ?? '',
-      rating: rating,
+      voteAverage: voteAverage,
+      popularity: popularity,
     );
   }
 
@@ -56,7 +66,8 @@ class Movie {
       'posterUrl': posterUrl,
       'year': year,
       'overview': overview,
-      'rating': rating,
+      'voteAverage': voteAverage,
+      'popularity': popularity,
     };
   }
 }

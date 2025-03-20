@@ -56,18 +56,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
     });
 
     try {
-      // Create user with email and password
+      // First create the user account
       final UserCredential userCredential =
           await _auth.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
 
-      // If user creation is successful, store additional user data in Firestore
+      // If user creation is successful, attempt to send verification email
       if (userCredential.user != null) {
-        // Send email verification
-        await userCredential.user!.sendEmailVerification();
+        try {
+          await userCredential.user!.sendEmailVerification();
+        } catch (e) {
+          // If email verification fails, delete the user account and show error
+          await userCredential.user!.delete();
+          throw FirebaseAuthException(
+            code: 'verification-email-failed',
+            message: 'Failed to send verification email. Please try again.',
+          );
+        }
 
+        // Only store user data if verification email was sent successfully
         await _firestore.collection('users').doc(userCredential.user!.uid).set({
           'username': _usernameController.text.trim(),
           'email': _emailController.text.trim(),
@@ -139,19 +148,38 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     onPressed: () async {
                       try {
                         await _auth.currentUser!.sendEmailVerification();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Verification email resent!'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'Verification email resent! Please check your inbox and spam folder.'),
+                              backgroundColor: Colors.green,
+                              duration: Duration(seconds: 5),
+                            ),
+                          );
+                        }
+                      } on FirebaseAuthException catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(e.message ??
+                                  'Failed to resend verification email'),
+                              backgroundColor: Colors.red,
+                              duration: Duration(seconds: 5),
+                            ),
+                          );
+                        }
                       } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Error: $e'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  'An unexpected error occurred. Please try again.'),
+                              backgroundColor: Colors.red,
+                              duration: Duration(seconds: 5),
+                            ),
+                          );
+                        }
                       }
                     },
                     child: const Text('Resend Email'),

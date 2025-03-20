@@ -11,13 +11,52 @@ class TimelineItem extends StatelessWidget {
   final String?
       relevanceReason; // Why this is shown (e.g., "Because you liked Inception")
   final bool isHighlighted;
+  final double?
+      relevanceScore; // Optional score (0.0-1.0) to show how relevant this is
 
   const TimelineItem({
     Key? key,
     required this.post,
     this.relevanceReason,
     this.isHighlighted = false,
+    this.relevanceScore,
   }) : super(key: key);
+
+  Color _getRelevanceColor(BuildContext context, double score) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    if (score >= 0.8) return colorScheme.primary;
+    if (score >= 0.6) return colorScheme.secondary;
+    if (score >= 0.4) return colorScheme.tertiary;
+    return colorScheme.onSurfaceVariant;
+  }
+
+  IconData _getRelevanceIcon(String? reason) {
+    if (reason == null) return Icons.recommend;
+
+    final lowerReason = reason.toLowerCase();
+
+    if (lowerReason.contains('friend') || lowerReason.contains('follow')) {
+      return Icons.people;
+    } else if (lowerReason.contains('liked') ||
+        lowerReason.contains('enjoyed')) {
+      return Icons.thumb_up;
+    } else if (lowerReason.contains('watched') ||
+        lowerReason.contains('viewed')) {
+      return Icons.visibility;
+    } else if (lowerReason.contains('genre') ||
+        lowerReason.contains('similar')) {
+      return Icons.movie_filter;
+    } else if (lowerReason.contains('trending') ||
+        lowerReason.contains('popular')) {
+      return Icons.trending_up;
+    } else if (lowerReason.contains('director') ||
+        lowerReason.contains('actor')) {
+      return Icons.person;
+    }
+
+    return Icons.recommend;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +74,7 @@ class TimelineItem extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // If there's a relevance reason, show it at the top
+          // If there's a relevance reason, show it at the top with improved styling
           if (relevanceReason != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -49,20 +88,55 @@ class TimelineItem extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    Icons.recommend,
+                    _getRelevanceIcon(relevanceReason),
                     size: 16,
-                    color: colorScheme.primary,
+                    color: relevanceScore != null
+                        ? _getRelevanceColor(context, relevanceScore!)
+                        : colorScheme.primary,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      relevanceReason!,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.onSurfaceVariant,
+                    child: RichText(
+                      text: TextSpan(
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: 'Recommendation: ',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: relevanceScore != null
+                                  ? _getRelevanceColor(context, relevanceScore!)
+                                  : colorScheme.primary,
+                            ),
+                          ),
+                          TextSpan(
+                            text: relevanceReason!,
+                          ),
+                        ],
                       ),
                     ),
                   ),
+                  if (relevanceScore != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _getRelevanceColor(context, relevanceScore!)
+                            .withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${(relevanceScore! * 100).toInt()}%',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: _getRelevanceColor(context, relevanceScore!),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

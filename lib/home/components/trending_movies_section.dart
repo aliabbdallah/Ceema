@@ -162,7 +162,7 @@ class _TrendingMoviesSectionState extends State<TrendingMoviesSection>
                             ),
                             const SizedBox(width: 2),
                             Text(
-                              movie.rating.toStringAsFixed(1),
+                              movie.voteAverage.toStringAsFixed(1),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,

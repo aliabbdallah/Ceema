@@ -2,16 +2,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:provider/provider.dart';
 import 'dart:async';
+import 'dart:convert';
 
 import '../models/user_preferences.dart';
 import '../services/preference_service.dart';
 import '../services/tmdb_service.dart';
-import '../services/content_recommendation_service.dart';
 import '../models/movie.dart';
 import '../widgets/loading_indicator.dart';
-import '../widgets/star_rating.dart';
 import '../screens/movie_details_screen.dart';
 
 class PreferenceSettingsScreen extends StatefulWidget {
@@ -221,6 +219,16 @@ class _PreferenceSettingsScreenState extends State<PreferenceSettingsScreen>
         genres = (item['genres'] as List).map((g) => g['id']).toList();
       }
 
+      if (genres.isEmpty) {
+        // If we still don't have genres, fetch the movie details
+        final movieId = item['id'].toString();
+        final details = await TMDBService.getMovieDetails(movieId);
+
+        if (details.containsKey('genres')) {
+          genres = (details['genres'] as List).map((g) => g['id']).toList();
+        }
+      }
+
       if (genres.isNotEmpty) {
         // Get genre names from IDs
         for (var genreId in genres) {
@@ -237,6 +245,8 @@ class _PreferenceSettingsScreenState extends State<PreferenceSettingsScreen>
         if (mounted) {
           _showSuccessSnackBar('Genre preferences added');
         }
+      } else {
+        _showErrorSnackBar('No genres found for this movie');
       }
     } catch (e) {
       _showErrorSnackBar('Error adding genre preference: $e');
@@ -250,60 +260,53 @@ class _PreferenceSettingsScreenState extends State<PreferenceSettingsScreen>
       final details = await TMDBService.getMovieDetails(movieId);
 
       if (details.containsKey('credits') &&
-          details['credits'].containsKey('cast')) {
+          details['credits'].containsKey('cast') &&
+          (details['credits']['cast'] as List).isNotEmpty) {
         final cast = details['credits']['cast'] as List;
-        if (cast.isNotEmpty) {
-          // Take first 5 main actors
-          for (var i = 0; i < min(5, cast.length); i++) {
-            final actor = cast[i];
-            await _preferenceService.addPreference(
-              id: actor['id'].toString(),
-              name: actor['name'],
-              type: 'actor',
-              weight: _calculateActorWeight(actor),
-            );
-          }
 
-          await _loadPreferences();
+        // Take first 5 main actors
+        for (var i = 0; i < min(5, cast.length); i++) {
+          final actor = cast[i];
+          await _preferenceService.addPreference(
+            id: actor['id'].toString(),
+            name: actor['name'],
+            type: 'actor',
+            weight: _calculateActorWeight(actor),
+          );
+        }
 
-          if (mounted) {
+        await _loadPreferences();
+        _showSuccessSnackBar('Actor preferences added');
+      } else {
+        // Try getting credits directly if not included in movie details
+        try {
+          final creditsData = await TMDBService.getMovieCredits(movieId);
+
+          if (creditsData.containsKey('cast') &&
+              (creditsData['cast'] as List).isNotEmpty) {
+            final cast = creditsData['cast'] as List;
+
+            for (var i = 0; i < min(5, cast.length); i++) {
+              final actor = cast[i];
+              await _preferenceService.addPreference(
+                id: actor['id'].toString(),
+                name: actor['name'],
+                type: 'actor',
+                weight: _calculateActorWeight(actor),
+              );
+            }
+
+            await _loadPreferences();
             _showSuccessSnackBar('Actor preferences added');
+          } else {
+            _showErrorSnackBar('No cast information available for this movie');
           }
+        } catch (e) {
+          _showErrorSnackBar('Could not retrieve cast information: $e');
         }
       }
     } catch (e) {
       _showErrorSnackBar('Error adding actor preference: $e');
-    }
-  }
-
-  void _addToDislikedPreference(Map<String, dynamic> item, String type) async {
-    try {
-      switch (type) {
-        case 'actor':
-          final movieId = item['id'].toString();
-          final details = await TMDBService.getMovieDetails(movieId);
-
-          if (details.containsKey('credits') &&
-              details['credits'].containsKey('cast')) {
-            final cast = details['credits']['cast'] as List;
-            if (cast.isNotEmpty) {
-              // Take first 5 main actors
-              for (var i = 0; i < min(5, cast.length); i++) {
-                final actor = cast[i];
-                await _preferenceService.addDislikePreference(
-                  id: actor['id'].toString(),
-                  name: actor['name'],
-                  type: 'actor',
-                  weight: _calculateActorWeight(actor),
-                );
-              }
-            }
-          }
-          break;
-        // ... rest of the method remains the same
-      }
-    } catch (e) {
-      _showErrorSnackBar('Error adding dislike preference: $e');
     }
   }
 
@@ -334,14 +337,108 @@ class _PreferenceSettingsScreenState extends State<PreferenceSettingsScreen>
           if (mounted) {
             _showSuccessSnackBar('Director preferences added');
           }
+        } else {
+          _showErrorSnackBar('No directors found for this movie');
         }
+      } else {
+        _showErrorSnackBar('Crew information not available');
       }
     } catch (e) {
       _showErrorSnackBar('Error adding director preference: $e');
     }
   }
 
-// Helper method to calculate actor weight based on their role
+  void _addToDislikedPreference(Map<String, dynamic> item, String type) async {
+    try {
+      final movieId = item['id'].toString();
+      final details = await TMDBService.getMovieDetails(movieId);
+
+      switch (type) {
+        case 'actor':
+          if (details.containsKey('credits') &&
+              details['credits'].containsKey('cast')) {
+            final cast = details['credits']['cast'] as List;
+            if (cast.isNotEmpty) {
+              // Take first 5 main actors
+              for (var i = 0; i < min(5, cast.length); i++) {
+                final actor = cast[i];
+                await _preferenceService.addDislikePreference(
+                  id: actor['id'].toString(),
+                  name: actor['name'],
+                  type: 'actor',
+                  weight: _calculateActorWeight(actor),
+                );
+              }
+              await _loadPreferences();
+              _showSuccessSnackBar('Actor dislikes added');
+            } else {
+              _showErrorSnackBar('No actors found for this movie');
+            }
+          } else {
+            _showErrorSnackBar('Cast information not available');
+          }
+          break;
+
+        case 'director':
+          if (details.containsKey('credits') &&
+              details['credits'].containsKey('crew')) {
+            final directors = (details['credits']['crew'] as List)
+                .where((crew) => crew['job'] == 'Director')
+                .toList();
+
+            if (directors.isNotEmpty) {
+              for (var director in directors) {
+                await _preferenceService.addDislikePreference(
+                  id: director['id'].toString(),
+                  name: director['name'],
+                  type: 'director',
+                  weight: _calculateDirectorWeight(director),
+                );
+              }
+              await _loadPreferences();
+              _showSuccessSnackBar('Director dislikes added');
+            } else {
+              _showErrorSnackBar('No directors found for this movie');
+            }
+          } else {
+            _showErrorSnackBar('Crew information not available');
+          }
+          break;
+
+        case 'genre':
+          List<dynamic> genres = item['genre_ids'] ?? [];
+
+          if (genres.isEmpty && details.containsKey('genres')) {
+            genres = (details['genres'] as List).map((g) => g['id']).toList();
+          }
+
+          if (genres.isNotEmpty) {
+            // Get genre names from IDs
+            for (var genreId in genres) {
+              final genreName = _genreMap[genreId] ?? 'Genre $genreId';
+              await _preferenceService.addDislikePreference(
+                id: genreId.toString(),
+                name: genreName,
+                type: 'genre',
+              );
+            }
+
+            await _loadPreferences();
+            _showSuccessSnackBar('Genre dislikes added');
+          } else {
+            _showErrorSnackBar('No genres found for this movie');
+          }
+          break;
+
+        default:
+          _showErrorSnackBar('Unknown preference type: $type');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error adding dislike preference: $e');
+    }
+  }
+
+  // Helper method to calculate actor weight based on their role
   double _calculateActorWeight(Map<String, dynamic> actor) {
     // Consider actor's popularity and prominence in the movie
     final popularity = actor['popularity'] ?? 1.0;
@@ -352,7 +449,7 @@ class _PreferenceSettingsScreenState extends State<PreferenceSettingsScreen>
     return 1.0 + (10.0 / (order + 1)) * (popularity / 100.0);
   }
 
-// Helper method to calculate director weight
+  // Helper method to calculate director weight
   double _calculateDirectorWeight(Map<String, dynamic> director) {
     // Consider director's reputation and popularity
     final popularity = director['popularity'] ?? 1.0;
