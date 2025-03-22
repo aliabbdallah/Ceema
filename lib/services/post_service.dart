@@ -35,12 +35,16 @@ class PostService {
     return _firestore
         .collection('posts')
         .orderBy('createdAt', descending: true)
-        .orderBy('userId') // By default, orderBy is ascending
+        .limit(50) // Limit to most recent 50 posts for better performance
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
+      final posts = snapshot.docs
           .map((doc) => Post.fromJson(doc.data(), doc.id))
           .toList();
+
+      // Sort by creation time to ensure newest posts appear first
+      posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return posts;
     });
   }
 
@@ -81,17 +85,37 @@ class PostService {
         return;
       }
 
-      // Query posts from friends and the user
-      yield* _firestore
-          .collection('posts')
-          .where('userId', whereIn: friendIds)
-          .orderBy('createdAt', descending: true)
-          .snapshots()
-          .map((snapshot) {
-        return snapshot.docs
-            .map((doc) => Post.fromJson(doc.data(), doc.id))
-            .toList();
-      });
+      // Handle large friend lists by breaking into chunks of 10 (Firestore limit)
+      final chunks = <List<String>>[];
+      for (var i = 0; i < friendIds.length; i += 10) {
+        chunks.add(
+          friendIds.sublist(
+            i,
+            i + 10 > friendIds.length ? friendIds.length : i + 10,
+          ),
+        );
+      }
+
+      // Query each chunk and combine results
+      yield* Stream.periodic(const Duration(seconds: 5), (_) async {
+        final allPosts = <Post>[];
+
+        for (final chunk in chunks) {
+          final snapshot = await _firestore
+              .collection('posts')
+              .where('userId', whereIn: chunk)
+              .orderBy('createdAt', descending: true)
+              .get();
+
+          allPosts.addAll(
+            snapshot.docs.map((doc) => Post.fromJson(doc.data(), doc.id)),
+          );
+        }
+
+        // Sort all posts by creation time
+        allPosts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return allPosts;
+      }).asyncMap((future) => future);
     } catch (e) {
       print('Error getting friends posts: $e');
       // Return an empty list in case of error

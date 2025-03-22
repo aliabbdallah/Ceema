@@ -1,7 +1,6 @@
 // Modified lib/home/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import '../components/feed_screen.dart';
-import 'package:ceema/screens/mood_entry_point_screen.dart';
 import 'package:ceema/screens/diary_screen.dart';
 import 'package:ceema/screens/profile_screen.dart';
 import 'package:ceema/screens/watchlist_screen.dart';
@@ -93,7 +92,6 @@ class _HomeScreenState extends State<HomeScreen>
     final colorScheme = Theme.of(context).colorScheme;
     final List<Widget> screens = [
       const FeedScreen(),
-      const MoodEntryPointScreen(),
       const DiaryScreen(),
       const WatchlistScreen(),
       const ProfileScreen(),
@@ -141,12 +139,6 @@ class _HomeScreenState extends State<HomeScreen>
             selectedIcon: Icon(Icons.home),
             label: 'Home',
             tooltip: 'Home Feed',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.mood_outlined),
-            selectedIcon: Icon(Icons.mood),
-            label: 'Mood',
-            tooltip: 'Mood Recommendations',
           ),
           NavigationDestination(
             icon: Icon(Icons.book_outlined),

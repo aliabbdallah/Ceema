@@ -6,7 +6,6 @@ import '../models/timeline_activity.dart';
 import '../services/timeline_service.dart';
 import '../home/components/post_card.dart';
 import '../widgets/loading_indicator.dart';
-import '../widgets/mood_recommendation_button.dart';
 import '../widgets/relevance_indicator.dart';
 import '../screens/movie_details_screen.dart';
 
@@ -322,16 +321,6 @@ class _TimelineScreenState extends State<TimelineScreen>
                         color: colorScheme.primary,
                       )
                     : const SizedBox(height: 1),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTimelineHeader(colorScheme),
-                  const MoodRecommendationButton(),
-                  _buildGenreFilter(colorScheme),
-                ],
               ),
             ),
             StreamBuilder<List<TimelineItem>?>(
