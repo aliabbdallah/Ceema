@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/post.dart';
 import '../models/movie.dart';
+import 'notification_service.dart';
 
 class PostService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final NotificationService _notificationService = NotificationService();
 
   Future<void> createPost({
     required String userId,
@@ -130,17 +132,42 @@ class PostService {
 
     if (post.exists) {
       final likes = List<String>.from(post.data()?['likes'] ?? []);
+      final postOwnerId = post.data()?['userId'] as String;
+
+      // Don't notify if the user is liking their own post
+      final shouldNotify = postOwnerId != userId;
 
       if (likes.contains(userId)) {
         // Unlike
         await postRef.update({
           'likes': FieldValue.arrayRemove([userId])
         });
+        // No notification for unlikes
       } else {
         // Like
         await postRef.update({
           'likes': FieldValue.arrayUnion([userId])
         });
+
+        // Notify the post owner about the like
+        if (shouldNotify) {
+          try {
+            final userData =
+                await _firestore.collection('users').doc(userId).get();
+            final userName = userData.data()?['displayName'] ?? 'A user';
+            final userPhotoUrl = userData.data()?['photoURL'];
+
+            await _notificationService.createPostLikeNotification(
+              recipientUserId: postOwnerId,
+              senderUserId: userId,
+              senderName: userName,
+              senderPhotoUrl: userPhotoUrl,
+              postId: postId,
+            );
+          } catch (e) {
+            print('Error creating like notification: $e');
+          }
+        }
       }
     }
   }
@@ -157,6 +184,28 @@ class PostService {
     }
   }
 
+  // Get comments for a post
+  Stream<List<dynamic>> getComments(String postId) {
+    return _firestore
+        .collection('posts')
+        .doc(postId)
+        .collection('comments')
+        .orderBy('createdAt', descending: false) // Show oldest comments first
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'id': doc.id,
+          ...data,
+          'createdAt': data['createdAt'] != null
+              ? (data['createdAt'] as Timestamp).toDate()
+              : DateTime.now(),
+        };
+      }).toList();
+    });
+  }
+
   // Add a comment to a post
   Future<void> addComment({
     required String postId,
@@ -165,9 +214,21 @@ class PostService {
     required String userAvatar,
     required String content,
   }) async {
-    // Create a new comment
-    await _firestore.collection('comments').add({
-      'postId': postId,
+    final commentRef =
+        _firestore.collection('posts').doc(postId).collection('comments').doc();
+
+    // Get the post data to check the post owner
+    final postDoc = await _firestore.collection('posts').doc(postId).get();
+    final postOwnerId = postDoc.data()?['userId'] as String;
+
+    // Don't notify if the user is commenting on their own post
+    final shouldNotify = postOwnerId != userId;
+
+    // Start a batch write
+    final batch = _firestore.batch();
+
+    // Add the comment
+    batch.set(commentRef, {
       'userId': userId,
       'userName': userName,
       'userAvatar': userAvatar,
@@ -177,25 +238,28 @@ class PostService {
     });
 
     // Update the comment count on the post
-    await _firestore.collection('posts').doc(postId).update({
+    batch.update(_firestore.collection('posts').doc(postId), {
       'commentCount': FieldValue.increment(1),
     });
-  }
 
-  // Get comments for a post
-  Stream<List<Map<String, dynamic>>> getComments(String postId) {
-    return _firestore
-        .collection('comments')
-        .where('postId', isEqualTo: postId)
-        .orderBy('createdAt', descending: false)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
-      }).toList();
-    });
+    // Execute the batch
+    await batch.commit();
+
+    // Notify the post owner about the comment
+    if (shouldNotify) {
+      try {
+        await _notificationService.createPostCommentNotification(
+          recipientUserId: postOwnerId,
+          senderUserId: userId,
+          senderName: userName,
+          senderPhotoUrl: userAvatar,
+          postId: postId,
+          commentText: content,
+        );
+      } catch (e) {
+        print('Error creating comment notification: $e');
+      }
+    }
   }
 
   // Toggle like on a comment

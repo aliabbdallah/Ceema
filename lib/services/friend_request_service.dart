@@ -2,10 +2,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/friend_request.dart';
 import 'friend_service.dart';
+import 'notification_service.dart';
 
 class FriendRequestService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FriendService _friendService = FriendService();
+  final NotificationService _notificationService = NotificationService();
 
   // Send a friend request
   Future<void> sendFriendRequest({
@@ -46,6 +48,14 @@ class FriendRequestService {
       'status': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
     });
+
+    // Create notification for the receiver
+    await _notificationService.createFriendRequestNotification(
+      recipientUserId: receiverId,
+      senderUserId: senderId,
+      senderName: senderName,
+      senderPhotoUrl: senderAvatar,
+    );
   }
 
   // Accept a friend request
@@ -70,6 +80,14 @@ class FriendRequestService {
 
     // Execute the batch
     await batch.commit();
+
+    // Create notification for the sender that their request was accepted
+    await _notificationService.createFriendAcceptedNotification(
+      recipientUserId: request.senderId,
+      senderUserId: request.receiverId,
+      senderName: request.receiverName,
+      senderPhotoUrl: request.receiverAvatar,
+    );
   }
 
   // Decline a friend request

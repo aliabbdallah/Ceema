@@ -1,4 +1,4 @@
-// Modified lib/home/screens/home_screen.dart
+// lib/home/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import '../components/feed_screen.dart';
 import 'package:ceema/screens/diary_screen.dart';
@@ -91,7 +91,7 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final List<Widget> screens = [
-      const FeedScreen(),
+      const SeamlessFeedScreen(),
       const DiaryScreen(),
       const WatchlistScreen(),
       const ProfileScreen(),
@@ -116,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen>
                 controller: _pageController,
                 physics: _isPageChanging
                     ? const NeverScrollableScrollPhysics()
-                    : const AlwaysScrollableScrollPhysics(),
+                    : const NeverScrollableScrollPhysics(), // Disable swipe to change tabs
                 onPageChanged: (index) {
                   if (!_isPageChanging) {
                     setState(() => _currentTab = index);
@@ -126,12 +126,12 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ),
       bottomNavigationBar: NavigationBar(
-        elevation: 8,
+        elevation: 0,
         backgroundColor: colorScheme.surface,
         indicatorColor: colorScheme.primaryContainer,
         selectedIndex: _currentTab,
         labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-        animationDuration: const Duration(milliseconds: 500),
+        animationDuration: const Duration(milliseconds: 300),
         onDestinationSelected: _changePage,
         destinations: const [
           NavigationDestination(

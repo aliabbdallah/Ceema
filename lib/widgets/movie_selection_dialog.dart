@@ -43,7 +43,8 @@ class _MovieSelectionDialogState extends State<MovieSelectionDialog> {
       });
 
       try {
-        final results = await TMDBService.searchMovies(query);
+        final tmdbService = TMDBService();
+        final results = await TMDBService.searchMoviesRaw(query);
         if (mounted) {
           setState(() {
             _searchResults =

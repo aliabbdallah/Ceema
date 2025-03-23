@@ -135,7 +135,8 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
 
   Future<void> _loadMovieDetails() async {
     try {
-      final details = await TMDBService.getMovieDetails(widget.movie.id);
+      final tmdbService = TMDBService();
+      final details = await TMDBService.getMovieDetailsRaw(widget.movie.id);
       final similar = await TMDBService.getSimilarMovies(widget.movie.id);
 
       if (mounted) {
@@ -420,12 +421,6 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                       ),
                     ),
                     const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.share_outlined),
-                      onPressed: () {
-                        // TODO: Implement share functionality
-                      },
-                    ),
                   ],
                 ),
               ],

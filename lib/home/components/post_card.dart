@@ -1,4 +1,3 @@
-// lib/home/components/post_card.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -23,6 +22,81 @@ class PostCard extends StatefulWidget {
 }
 
 class _PostCardState extends State<PostCard> {
+  final PostService _postService = PostService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  bool _isLiked = false;
+  bool _isShared = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isLiked = widget.post.likes.contains(_auth.currentUser?.uid);
+    _isShared = widget.post.shares.contains(_auth.currentUser?.uid);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            leading: CircleAvatar(
+              backgroundImage: NetworkImage(widget.post.userAvatar),
+            ),
+            title: Text(widget.post.userName),
+            subtitle: Text(timeago.format(widget.post.createdAt)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(widget.post.content),
+          ),
+          if (widget.post.movieId.isNotEmpty)
+            ListTile(
+              leading: Image.network(widget.post.moviePosterUrl),
+              title: Text(widget.post.movieTitle),
+              subtitle: Text(widget.post.movieYear),
+            ),
+          ButtonBar(
+            children: [
+              IconButton(
+                icon: Icon(_isLiked ? Icons.favorite : Icons.favorite_border),
+                onPressed: () {},
+              ),
+              IconButton(
+                icon: Icon(Icons.comment),
+                onPressed: () {},
+              ),
+              IconButton(
+                icon: Icon(Icons.share),
+                onPressed: () {},
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Also include SeamlessPostCard if needed
+class SeamlessPostCard extends StatefulWidget {
+  final Post post;
+  final bool isHighlighted;
+  final String? relevanceReason;
+
+  const SeamlessPostCard({
+    Key? key,
+    required this.post,
+    this.isHighlighted = false,
+    this.relevanceReason,
+  }) : super(key: key);
+
+  @override
+  State<SeamlessPostCard> createState() => _SeamlessPostCardState();
+}
+
+class _SeamlessPostCardState extends State<SeamlessPostCard> {
   final PostService _postService = PostService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   bool _isLiked = false;
@@ -159,192 +233,69 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  Widget _buildPostHeader() {
-    return GestureDetector(
-      onTap: () {
-        if (widget.post.userId != _auth.currentUser?.uid) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => UserProfileScreen(
-                userId: widget.post.userId,
-                username: widget.post.userName,
-              ),
-            ),
-          );
-        }
-      },
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundImage: NetworkImage(widget.post.userAvatar),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.post.userName,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  timeago.format(widget.post.createdAt),
-                  style: TextStyle(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withOpacity(0.6),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: _showPostOptions,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMovieCard() {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => MovieDetailsScreen(
-              movie: Movie(
-                id: widget.post.movieId,
-                title: widget.post.movieTitle,
-                posterUrl: widget.post.moviePosterUrl,
-                year: widget.post.movieYear,
-                overview: widget.post.movieOverview,
-              ),
-            ),
-          ),
-        );
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(8),
-                bottomLeft: Radius.circular(8),
-              ),
-              child: Image.network(
-                widget.post.moviePosterUrl,
-                width: 80,
-                height: 120,
-                fit: BoxFit.cover,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.post.movieTitle,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.post.movieYear,
-                    style: TextStyle(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withOpacity(0.6),
-                    ),
-                  ),
-                  if (widget.post.rating > 0) ...[
-                    const SizedBox(height: 8),
-                    StarRating(
-                      rating: widget.post.rating.toDouble(),
-                      size: 16,
-                      spacing: 2,
-                      readOnly: true,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPostActions() {
-    return Row(
-      children: [
-        IconButton(
-          icon: Icon(
-            _isLiked ? Icons.favorite : Icons.favorite_border,
-            color: _isLiked ? Colors.red : null,
-          ),
-          onPressed: _handleLike,
-        ),
-        Text(widget.post.likes.length.toString()),
-        const SizedBox(width: 16),
-        IconButton(
-          icon: const Icon(Icons.comment_outlined),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => CommentsScreen(post: widget.post),
-              ),
-            );
-          },
-        ),
-        Text(widget.post.commentCount.toString()),
-        const Spacer(),
-        IconButton(
-          icon: Icon(
-            Icons.share_outlined,
-            color: _isShared ? Colors.blue : null,
-          ),
-          onPressed: _handleShare,
-        ),
-        Text(widget.post.shares.length.toString()),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final brightness = Theme.of(context).brightness;
+    final isDark = brightness == Brightness.dark;
+
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildPostHeader(),
-            const SizedBox(height: 12),
-            Text(widget.post.content),
-            const SizedBox(height: 12),
-            if (widget.post.movieId.isNotEmpty) ...[
-              _buildMovieCard(),
-              const SizedBox(height: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            leading: CircleAvatar(
+              backgroundImage: NetworkImage(widget.post.userAvatar),
+            ),
+            title: Text(widget.post.userName),
+            subtitle: Text(timeago.format(widget.post.createdAt)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(widget.post.content),
+          ),
+          if (widget.post.movieId.isNotEmpty)
+            ListTile(
+              leading: Image.network(widget.post.moviePosterUrl),
+              title: Text(widget.post.movieTitle),
+              subtitle: Text(widget.post.movieYear),
+            ),
+          if (widget.relevanceReason != null)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                widget.relevanceReason!,
+                style: TextStyle(
+                  fontStyle: FontStyle.italic,
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+              ),
+            ),
+          ButtonBar(
+            children: [
+              IconButton(
+                icon: Icon(_isLiked ? Icons.favorite : Icons.favorite_border),
+                onPressed: _handleLike,
+              ),
+              IconButton(
+                icon: Icon(Icons.comment),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => CommentsScreen(post: widget.post),
+                    ),
+                  );
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.share),
+                onPressed: _handleShare,
+              ),
             ],
-            _buildPostActions(),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

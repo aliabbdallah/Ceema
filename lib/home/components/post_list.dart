@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/post.dart';
 import '../../services/post_service.dart';
-import 'post_card.dart';
-import '../../widgets/loading_indicator.dart';
+import './post_card.dart';
 
 class PostList extends StatelessWidget {
   final bool showFriendsOnly;
@@ -132,7 +131,11 @@ class PostList extends StatelessWidget {
                 opacity: 1.0,
                 duration: Duration(milliseconds: 500 + (index * 100)),
                 curve: Curves.easeInOut,
-                child: PostCard(post: snapshot.data![index]),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: PostCard(post: snapshot.data![index]),
+                ),
               );
             },
             childCount: snapshot.data!.length + 1, // +1 for bottom padding

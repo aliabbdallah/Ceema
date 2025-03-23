@@ -1,26 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/services.dart';
 import 'trending_movies_section.dart';
-import 'compose_post_section.dart';
-import 'post_list.dart';
-import 'app_bar.dart';
 import 'post_card.dart';
+import 'app_bar.dart';
 import '../../models/movie.dart';
 import '../../models/post.dart';
 import '../../services/post_service.dart';
 import '../../services/post_recommendation_service.dart';
 import '../../screens/post_recommendations_screen.dart';
-import '../../screens/comments_screen.dart';
 import '../../widgets/loading_indicator.dart';
+import 'compose_post_section.dart';
+import '../../screens/user_search_screen.dart';
+import '../../screens/notifications_screen.dart';
+import '../../services/notification_service.dart';
 
-class FeedScreen extends StatefulWidget {
-  const FeedScreen({Key? key}) : super(key: key);
+class SeamlessFeedScreen extends StatefulWidget {
+  const SeamlessFeedScreen({Key? key}) : super(key: key);
 
   @override
-  _FeedScreenState createState() => _FeedScreenState();
+  _SeamlessFeedScreenState createState() => _SeamlessFeedScreenState();
 }
 
-class _FeedScreenState extends State<FeedScreen>
+class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
     with AutomaticKeepAliveClientMixin {
   final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey =
       GlobalKey<RefreshIndicatorState>();
@@ -36,6 +38,7 @@ class _FeedScreenState extends State<FeedScreen>
 
   // Track visibility of various sections
   bool _showTrendingMoviesSection = true;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   bool get wantKeepAlive => true;
@@ -44,6 +47,31 @@ class _FeedScreenState extends State<FeedScreen>
   void initState() {
     super.initState();
     _checkUserPreferences();
+
+    // Add scroll listener to hide/show app bar
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    // You can implement dynamic behaviors based on scroll position
+    // For example, hide trending section when scrolling down
+    if (_scrollController.position.pixels > 200 && _showTrendingMoviesSection) {
+      setState(() {
+        _showTrendingMoviesSection = false;
+      });
+    } else if (_scrollController.position.pixels <= 200 &&
+        !_showTrendingMoviesSection) {
+      setState(() {
+        _showTrendingMoviesSection = true;
+      });
+    }
   }
 
   Future<void> _checkUserPreferences() async {
@@ -65,6 +93,10 @@ class _FeedScreenState extends State<FeedScreen>
   }
 
   void _showComposeSheet() {
+    // Provide tactile feedback
+    HapticFeedback.mediumImpact();
+
+    // Show compose sheet
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -78,69 +110,199 @@ class _FeedScreenState extends State<FeedScreen>
             topRight: Radius.circular(28),
           ),
         ),
-        child: ComposePostSection(
-          onCancel: () => Navigator.pop(context),
-          maxHeight: MediaQuery.of(context).size.height * 0.9,
+        child: Column(
+          children: [
+            // Drag indicator
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              height: 4,
+              width: 40,
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Compose UI would go here
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Create Post',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 16),
+                    // This is just a placeholder - your actual compose section would go here
+                    Expanded(
+                      child: ComposePostSection(
+                        onCancel: () => Navigator.pop(context),
+                        maxHeight: MediaQuery.of(context).size.height * 0.8,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildCreatePostCard(ColorScheme colorScheme) {
-    return Card(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: colorScheme.outlineVariant,
-          width: 1,
+    return Container(
+      margin: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: colorScheme.outlineVariant.withOpacity(0.5),
+            width: 0.5,
+          ),
         ),
       ),
-      child: InkWell(
-        onTap: _showComposeSheet,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 12,
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundImage: NetworkImage(
-                  _auth.currentUser?.photoURL ??
-                      'https://ui-avatars.com/api/?name=${_auth.currentUser?.displayName ?? "User"}',
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Row(
+              children: [
+                // User avatar
+                CircleAvatar(
+                  radius: 20,
+                  backgroundImage: NetworkImage(
+                    _auth.currentUser?.photoURL ??
+                        'https://ui-avatars.com/api/?name=${_auth.currentUser?.displayName ?? "User"}',
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceVariant.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Text(
-                    'Share your thoughts about a movie...',
-                    style: TextStyle(
-                      color: colorScheme.onSurfaceVariant,
-                      fontSize: 15,
+                const SizedBox(width: 12),
+                // Post input field
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _showComposeSheet,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surface,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: colorScheme.outlineVariant.withOpacity(0.5),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        "Log a movie you've watched",
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 15,
+                        ),
+                      ),
                     ),
                   ),
                 ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 16, color: color),
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor:
+            Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        minimumSize: Size.zero,
+      ),
+    );
+  }
+
+  Widget _buildFeedFilter(ColorScheme colorScheme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: colorScheme.outlineVariant.withOpacity(0.5),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          _buildFilterTab(
+            label: 'For You',
+            isSelected: _selectedFeedFilter == 'forYou',
+            onTap: () => setState(() => _selectedFeedFilter = 'forYou'),
+          ),
+          _buildFilterTab(
+            label: 'Friends',
+            isSelected: _selectedFeedFilter == 'friends',
+            onTap: () => setState(() => _selectedFeedFilter = 'friends'),
+          ),
+          _buildFilterTab(
+            label: 'All',
+            isSelected: _selectedFeedFilter == 'all',
+            onTap: () => setState(() => _selectedFeedFilter = 'all'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterTab({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
+                    : Colors.transparent,
+                width: 2,
               ),
-              const SizedBox(width: 8),
-              IconButton.filledTonal(
-                icon: const Icon(Icons.movie_outlined),
-                onPressed: _showComposeSheet,
-                tooltip: 'Select Movie',
-              ),
-            ],
+            ),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: isSelected
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
           ),
         ),
       ),
@@ -157,190 +319,241 @@ class _FeedScreenState extends State<FeedScreen>
         key: _refreshIndicatorKey,
         onRefresh: _refreshFeed,
         child: CustomScrollView(
+          controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            const CustomAppBar(),
-            SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Loading Indicator
-                  if (_isLoading)
-                    LinearProgressIndicator(
-                      backgroundColor: colorScheme.surfaceVariant,
-                      color: colorScheme.primary,
+            // App Bar
+            SliverAppBar(
+              pinned: true,
+              floating: true,
+              centerTitle: false,
+              title: Text(
+                'Ceema',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.primary,
+                ),
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const UserSearchScreen(),
+                      ),
+                    );
+                  },
+                ),
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_outlined),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const NotificationsScreen(),
+                          ),
+                        );
+                      },
                     ),
+                    StreamBuilder<int>(
+                      stream:
+                          NotificationService().getUnreadNotificationCount(),
+                      builder: (context, snapshot) {
+                        final unreadCount = snapshot.data ?? 0;
 
-                  // Create Post Card
-                  _buildCreatePostCard(colorScheme),
+                        if (unreadCount == 0) {
+                          return const SizedBox.shrink();
+                        }
 
-                  // Trending Movies
-                  if (_showTrendingMoviesSection) const TrendingMoviesSection(),
-
-                  // Feed Section Header with filter
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Your Feed',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: colorScheme.onBackground,
+                        return Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: colorScheme.error,
+                              shape: BoxShape.circle,
+                            ),
+                            child: unreadCount > 9
+                                ? Text(
+                                    '9+',
+                                    style: TextStyle(
+                                      color: colorScheme.onError,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  )
+                                : unreadCount > 1
+                                    ? Text(
+                                        '$unreadCount',
+                                        style: TextStyle(
+                                          color: colorScheme.onError,
+                                          fontSize: 8,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      )
+                                    : Container(
+                                        width: 4,
+                                        height: 4,
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.onError,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          height: 40,
-                          child: ListView(
-                            scrollDirection: Axis.horizontal,
-                            children: [
-                              FilterChip(
-                                label: const Text('All Posts'),
-                                selected: _selectedFeedFilter == 'all',
-                                onSelected: (selected) {
-                                  if (selected) {
-                                    setState(() => _selectedFeedFilter = 'all');
-                                  }
-                                },
-                                labelStyle: TextStyle(
-                                  color: _selectedFeedFilter == 'all'
-                                      ? colorScheme.onPrimary
-                                      : colorScheme.onSurfaceVariant,
-                                  fontSize: 12,
-                                ),
-                                selectedColor: colorScheme.primary,
-                                backgroundColor: colorScheme.surfaceVariant,
-                              ),
-                              const SizedBox(width: 8),
-                              FilterChip(
-                                label: const Text('Friends Only'),
-                                selected: _selectedFeedFilter == 'friends',
-                                onSelected: (selected) {
-                                  if (selected) {
-                                    setState(
-                                        () => _selectedFeedFilter = 'friends');
-                                  }
-                                },
-                                labelStyle: TextStyle(
-                                  color: _selectedFeedFilter == 'friends'
-                                      ? colorScheme.onPrimary
-                                      : colorScheme.onSurfaceVariant,
-                                  fontSize: 12,
-                                ),
-                                selectedColor: colorScheme.primary,
-                                backgroundColor: colorScheme.surfaceVariant,
-                              ),
-                              const SizedBox(width: 8),
-                              FilterChip(
-                                label: const Text('For You'),
-                                selected: _selectedFeedFilter == 'forYou',
-                                onSelected: (selected) {
-                                  if (selected) {
-                                    setState(
-                                        () => _selectedFeedFilter = 'forYou');
-                                  }
-                                },
-                                labelStyle: TextStyle(
-                                  color: _selectedFeedFilter == 'forYou'
-                                      ? colorScheme.onPrimary
-                                      : colorScheme.onSurfaceVariant,
-                                  fontSize: 12,
-                                ),
-                                selectedColor: colorScheme.primary,
-                                backgroundColor: colorScheme.surfaceVariant,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: CircleAvatar(
+                    radius: 14,
+                    backgroundImage: NetworkImage(
+                      _auth.currentUser?.photoURL ??
+                          'https://ui-avatars.com/api/?name=${_auth.currentUser?.displayName ?? "User"}',
                     ),
                   ),
-                ],
-              ),
+                  onPressed: () {
+                    // Navigate to profile
+                  },
+                ),
+              ],
             ),
 
-            // Post List Section
+            // Loading indicator
+            if (_isLoading)
+              SliverToBoxAdapter(
+                child: LinearProgressIndicator(
+                  backgroundColor: colorScheme.surfaceVariant,
+                  color: colorScheme.primary,
+                ),
+              ),
+
+            // Create post card
+            SliverToBoxAdapter(
+              child: _buildCreatePostCard(colorScheme),
+            ),
+
+            // Feed filter tabs
+            SliverToBoxAdapter(
+              child: _buildFeedFilter(colorScheme),
+            ),
+
+            // Trending Movies
+            if (_showTrendingMoviesSection)
+              const SliverToBoxAdapter(
+                child: TrendingMoviesSection(),
+              ),
+
+            // Post Stream
             _selectedFeedFilter == 'forYou'
                 ? StreamBuilder<List<Post>>(
                     stream: _recommendationService
                         .getRecommendedPosts(limit: 20)
                         .asStream(),
-                    builder: (context, snapshot) {
-                      if (snapshot.hasError) {
-                        return SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24.0),
-                            child:
-                                Center(child: Text('Error: ${snapshot.error}')),
-                          ),
-                        );
-                      }
-
-                      if (!snapshot.hasData) {
-                        return const SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.all(32.0),
-                            child: Center(child: CircularProgressIndicator()),
-                          ),
-                        );
-                      }
-
-                      if (snapshot.data!.isEmpty) {
-                        return SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.all(32.0),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.movie_filter,
-                                  size: 64,
-                                  color: colorScheme.primary.withOpacity(0.5),
-                                ),
-                                const SizedBox(height: 16),
-                                const Text(
-                                  'No recommendations yet',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Follow more friends, rate movies, or add entries to your diary to get personalized recommendations.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 14),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-
-                      return SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            if (index == snapshot.data!.length) {
-                              return const SizedBox(height: 80);
-                            }
-
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 8),
-                              child: PostCard(post: snapshot.data![index]),
-                            );
-                          },
-                          childCount: snapshot.data!.length + 1,
-                        ),
-                      );
-                    },
+                    builder: _buildPostStreamContent,
                   )
-                : PostList(showFriendsOnly: _selectedFeedFilter == 'friends'),
+                : _selectedFeedFilter == 'friends'
+                    ? StreamBuilder<List<Post>>(
+                        stream: _postService
+                            .getFriendsPosts(_auth.currentUser!.uid),
+                        builder: _buildPostStreamContent,
+                      )
+                    : StreamBuilder<List<Post>>(
+                        stream: _postService.getPosts(),
+                        builder: _buildPostStreamContent,
+                      ),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showComposeSheet,
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildPostStreamContent(
+      BuildContext context, AsyncSnapshot<List<Post>> snapshot) {
+    if (snapshot.hasError) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Center(child: Text('Error: ${snapshot.error}')),
+        ),
+      );
+    }
+
+    if (!snapshot.hasData) {
+      return const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+
+    if (snapshot.data!.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.movie_filter,
+                size: 64,
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _selectedFeedFilter == 'friends'
+                    ? 'No posts from friends'
+                    : _selectedFeedFilter == 'forYou'
+                        ? 'No recommendations yet'
+                        : 'No posts yet',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Follow more friends or check back later to see new content.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          if (index == snapshot.data!.length) {
+            // Add a bottom padding at the end of the list
+            return const SizedBox(height: 80);
+          }
+
+          // Use the seamless post card
+          return SeamlessPostCard(
+            post: snapshot.data![index],
+            // Apply relevance reason for recommended content
+            relevanceReason: _selectedFeedFilter == 'forYou'
+                ? 'Recommended based on your preferences'
+                : null,
+          );
+        },
+        childCount: snapshot.data!.length + 1, // +1 for bottom padding
       ),
     );
   }

@@ -1,4 +1,3 @@
-// lib/services/automatic_preference_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_preferences.dart';
@@ -79,22 +78,32 @@ class AutomaticPreferenceService {
       List<QueryDocumentSnapshot> entries) async {
     if (entries.isEmpty) return;
 
+    final tmdbService = TMDBService();
+
     for (var entry in entries) {
       try {
         final data = entry.data() as Map<String, dynamic>;
         final movieId = data['movieId'] as String;
 
         // Get detailed movie information including credits
-        final movieDetails = await TMDBService.getMovieDetails(movieId);
+        final movieDetails = await tmdbService.getMovieDetails(movieId);
+
+        // Convert Movie to Map<String, dynamic> for compatibility
+        final movieMap = {
+          'id': movieDetails.id,
+          'title': movieDetails.title,
+          'genres': await _fetchMovieGenres(movieId),
+          'credits': await TMDBService.getMovieCredits(movieId),
+        };
 
         // Process genres
-        await _processGenres(movieDetails, true);
+        await _processGenres(movieMap, true);
 
         // Process actors (cast)
-        await _processActors(movieDetails, true);
+        await _processActors(movieMap, true);
 
         // Process directors
-        await _processDirectors(movieDetails, true);
+        await _processDirectors(movieMap, true);
       } catch (e) {
         print('Error processing high-rated movie: $e');
         // Continue with next entry if one fails
@@ -103,10 +112,22 @@ class AutomaticPreferenceService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> _fetchMovieGenres(String movieId) async {
+    try {
+      final movieDetailsRaw = await TMDBService.getMovieDetailsRaw(movieId);
+      return List<Map<String, dynamic>>.from(movieDetailsRaw['genres'] ?? []);
+    } catch (e) {
+      print('Error fetching movie genres: $e');
+      return [];
+    }
+  }
+
   // Process low-rated movies to extract dislikes
   Future<void> _processLowRatedMovies(
       List<QueryDocumentSnapshot> entries) async {
     if (entries.isEmpty) return;
+
+    final tmdbService = TMDBService();
 
     for (var entry in entries) {
       try {
@@ -117,16 +138,24 @@ class AutomaticPreferenceService {
         await _preferenceService.markMovieAsNotInterested(movieId);
 
         // Get detailed movie information including credits
-        final movieDetails = await TMDBService.getMovieDetails(movieId);
+        final movieDetails = await tmdbService.getMovieDetails(movieId);
+
+        // Convert Movie to Map<String, dynamic> for compatibility
+        final movieMap = {
+          'id': movieDetails.id,
+          'title': movieDetails.title,
+          'genres': await _fetchMovieGenres(movieId),
+          'credits': await TMDBService.getMovieCredits(movieId),
+        };
 
         // Process genres
-        await _processGenres(movieDetails, false);
+        await _processGenres(movieMap, false);
 
         // Process actors (cast)
-        await _processActors(movieDetails, false);
+        await _processActors(movieMap, false);
 
         // Process directors
-        await _processDirectors(movieDetails, false);
+        await _processDirectors(movieMap, false);
       } catch (e) {
         print('Error processing low-rated movie: $e');
         // Continue with next entry if one fails

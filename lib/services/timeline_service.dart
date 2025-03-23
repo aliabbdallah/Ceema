@@ -326,7 +326,7 @@ class TimelineService {
 
     try {
       // Get detailed info including credits
-      final details = await TMDBService.getMovieDetails(movieId);
+      final details = await TMDBService.getMovieDetailsRaw(movieId);
 
       // Cache the result
       _movieDetailsCache[movieId] = details;

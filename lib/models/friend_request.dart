@@ -1,4 +1,3 @@
-// models/friend_request.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class FriendRequest {
@@ -9,7 +8,7 @@ class FriendRequest {
   final String receiverId;
   final String receiverName;
   final String receiverAvatar;
-  final String status; // 'pending', 'accepted', 'declined'
+  final String status;
   final DateTime createdAt;
 
   FriendRequest({

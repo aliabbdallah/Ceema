@@ -67,7 +67,7 @@ class _CommentListState extends State<CommentList> {
     return Column(
       children: [
         Expanded(
-          child: StreamBuilder<List<Map<String, dynamic>>>(
+          child: StreamBuilder<List<dynamic>>(
             stream: _postService.getComments(widget.postId),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
@@ -123,7 +123,8 @@ class _CommentListState extends State<CommentList> {
               CircleAvatar(
                 radius: 16,
                 backgroundImage: NetworkImage(
-                  _auth.currentUser?.photoURL ?? 'https://via.placeholder.com/150',
+                  _auth.currentUser?.photoURL ??
+                      'https://via.placeholder.com/150',
                 ),
               ),
               const SizedBox(width: 8),

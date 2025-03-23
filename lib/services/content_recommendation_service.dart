@@ -31,14 +31,35 @@ class ContentRecommendationService {
       print(
           'User preferences loaded: ${preferences.likes.length} likes, ${preferences.dislikes.length} dislikes');
 
-      // Skip if no preferences set
-      if (preferences.likes.isEmpty) {
-        print('WARNING: No preferences set, falling back to trending');
-        return _getFallbackRecommendations(limit);
+      print('DEBUG: Checking preferences state:');
+      print('- Likes: ${preferences.likes.length}');
+      print('- Dislikes: ${preferences.dislikes.length}');
+      print('- Importance Factors: ${preferences.importanceFactors}');
+      print('- Disliked Movies: ${preferences.dislikedMovieIds.length}');
+
+      // Always get some initial candidates, even without preferences
+      List<Map<String, dynamic>> candidates = [];
+      final tmdbService = TMDBService();
+
+      try {
+        // Get trending movies as base candidates
+        final trendingMoviesRaw = await TMDBService.getTrendingMoviesRaw();
+        print('DEBUG: Got ${trendingMoviesRaw.length} trending movies');
+        candidates.addAll(trendingMoviesRaw);
+      } catch (e) {
+        print('ERROR getting trending movies: $e');
       }
 
-      // Collect movie candidates
-      List<Map<String, dynamic>> candidates = [];
+      // If we have importance factors, add top rated movies
+      if (preferences.importanceFactors.isNotEmpty) {
+        try {
+          final topRatedMovies = await TMDBService.getTopRatedMovies();
+          print('DEBUG: Got ${topRatedMovies.length} top rated movies');
+          candidates.addAll(topRatedMovies);
+        } catch (e) {
+          print('ERROR getting top rated movies: $e');
+        }
+      }
 
       // Get movies based on preferred genres
       final genrePreferences =
@@ -64,8 +85,9 @@ class ContentRecommendationService {
       for (var director in directorPreferences) {
         try {
           // Search for movies by the director
-          final directorMovies = await TMDBService.searchMovies(director.name);
-          candidates.addAll(directorMovies);
+          final directorMoviesRaw =
+              await TMDBService.searchMoviesRaw(director.name);
+          candidates.addAll(directorMoviesRaw);
         } catch (e) {
           print('Error getting movies for director ${director.name}: $e');
         }
@@ -78,8 +100,8 @@ class ContentRecommendationService {
       for (var actor in actorPreferences) {
         try {
           // Search for movies with the actor
-          final actorMovies = await TMDBService.searchMovies(actor.name);
-          candidates.addAll(actorMovies);
+          final actorMoviesRaw = await TMDBService.searchMoviesRaw(actor.name);
+          candidates.addAll(actorMoviesRaw);
         } catch (e) {
           print('Error getting movies for actor ${actor.name}: $e');
         }
@@ -112,11 +134,27 @@ class ContentRecommendationService {
       scoredCandidates.sort(
           (a, b) => (b['score'] as double).compareTo(a['score'] as double));
 
-      // Convert to Movie objects
-      final recommendedMovies = scoredCandidates
-          .take(limit)
-          .map((data) => Movie.fromJson(data))
-          .toList();
+      // Convert to Movie objects with error handling
+      final recommendedMovies = <Movie>[];
+      for (var data in scoredCandidates.take(limit)) {
+        try {
+          print(
+              'DEBUG: Converting movie data: ${data['title']} (ID: ${data['id']})');
+          final movie = Movie.fromJson(data);
+          recommendedMovies.add(movie);
+        } catch (e) {
+          print('ERROR converting movie data: $e');
+          print('Problematic data: $data');
+        }
+      }
+
+      print('DEBUG: Returning ${recommendedMovies.length} recommended movies');
+
+      // If no movies could be converted, try fallback
+      if (recommendedMovies.isEmpty) {
+        print('WARNING: No movies could be converted, trying fallback');
+        return _getFallbackRecommendations(limit);
+      }
 
       return recommendedMovies;
     } catch (e) {
@@ -130,6 +168,7 @@ class ContentRecommendationService {
       List<Map<String, dynamic>> candidates,
       UserPreferences preferences) async {
     final result = <Map<String, dynamic>>[];
+    final tmdbService = TMDBService();
 
     for (var candidate in candidates) {
       double score = 0.0;
@@ -141,7 +180,7 @@ class ContentRecommendationService {
         movieDetails = _movieCache[movieId]!;
       } else {
         try {
-          movieDetails = await TMDBService.getMovieDetails(movieId);
+          movieDetails = await TMDBService.getMovieDetailsRaw(movieId);
           _movieCache[movieId] = movieDetails;
         } catch (e) {
           print('Error getting details for movie $movieId: $e');
@@ -217,10 +256,20 @@ class ContentRecommendationService {
         }
       }
 
-      // Apply importance factors if available
+      // Apply importance factors
       if (movieDetails.containsKey('vote_average')) {
         final rating = (movieDetails['vote_average'] as num).toDouble();
-        score += rating / 10.0; // Add a base score from rating
+
+        // Apply rating score weighted by user's importance factors
+        if (preferences.importanceFactors.isNotEmpty) {
+          // Use average of importance factors as a weight multiplier
+          final avgImportance =
+              preferences.importanceFactors.values.reduce((a, b) => a + b) /
+                  preferences.importanceFactors.length;
+          score += (rating / 10.0) * avgImportance;
+        } else {
+          score += rating / 10.0; // Default weight if no importance factors
+        }
       }
 
       // Store the original movie data with the calculated score
@@ -269,11 +318,25 @@ class ContentRecommendationService {
   // Fallback to trending movies if recommendations can't be generated
   Future<List<Movie>> _getFallbackRecommendations(int limit) async {
     try {
-      final trendingMovies = await TMDBService.getTrendingMovies();
-      return trendingMovies
-          .take(limit)
-          .map((data) => Movie.fromJson(data))
-          .toList();
+      print('DEBUG: Getting fallback recommendations');
+      final trendingMoviesRaw = await TMDBService.getTrendingMoviesRaw();
+      print('DEBUG: Got ${trendingMoviesRaw.length} trending movies');
+
+      final movies = <Movie>[];
+      for (var data in trendingMoviesRaw.take(limit)) {
+        try {
+          print(
+              'DEBUG: Converting fallback movie: ${data['title']} (ID: ${data['id']})');
+          final movie = Movie.fromJson(data);
+          movies.add(movie);
+        } catch (e) {
+          print('ERROR converting fallback movie: $e');
+          print('Problematic data: $data');
+        }
+      }
+
+      print('DEBUG: Returning ${movies.length} fallback movies');
+      return movies;
     } catch (e) {
       print('Error getting fallback recommendations: $e');
       return [];

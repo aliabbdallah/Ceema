@@ -8,6 +8,7 @@ import '../home/components/post_card.dart';
 import '../widgets/loading_indicator.dart';
 import '../widgets/relevance_indicator.dart';
 import '../screens/movie_details_screen.dart';
+import '../screens/compose_post_screen.dart';
 
 class TimelineScreen extends StatefulWidget {
   const TimelineScreen({Key? key}) : super(key: key);
@@ -305,6 +306,23 @@ class _TimelineScreenState extends State<TimelineScreen>
             },
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ComposePostScreen(),
+            ),
+          ).then((posted) {
+            if (posted == true) {
+              // If a post was created, refresh the timeline
+              _refreshIndicatorKey.currentState?.show();
+            }
+          });
+        },
+        tooltip: 'Create Post',
+        child: const Icon(Icons.add),
       ),
       body: RefreshIndicator(
         key: _refreshIndicatorKey,

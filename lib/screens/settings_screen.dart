@@ -3,11 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 
-import '../services/theme_service.dart';
 import '../screens/profile_edit_screen.dart';
 import '../screens/sign_in_screen.dart';
-import '../screens/dev_settings_screen.dart';
-import '../screens/preference_settings_screen.dart';
+import '../services/theme_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -221,67 +219,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
 
-          // Preferences Section
-          _buildSettingsSection(
-            title: 'Preferences',
-            children: [
-              // Recommendation Preferences
-              _buildSettingsItem(
-                icon: Icons.tune,
-                title: 'Recommendation Preferences',
-                subtitle: 'Customize your movie recommendations',
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const PreferenceSettingsScreen(),
-                  ),
-                ),
-              ),
-
-              // Notifications Toggle
-              SwitchListTile(
-                title: const Text('Notifications'),
-                subtitle: const Text('Receive app updates and alerts'),
-                value: _notificationsEnabled,
-                onChanged: (value) {
-                  setState(() {
-                    _notificationsEnabled = value;
-                  });
-                  _updateSetting('notificationsEnabled', value);
-                },
-              ),
-
-              // Dark Mode Toggle
-              Consumer<ThemeService>(
-                builder: (context, themeService, child) {
-                  return SwitchListTile(
-                    title: const Text('Dark Mode'),
-                    subtitle:
-                        const Text('Switch between light and dark themes'),
-                    value: themeService.isDarkMode,
-                    onChanged: (value) async {
-                      await themeService.toggleTheme();
-                    },
-                  );
-                },
-              ),
-
-              // Privacy Mode Toggle
-              SwitchListTile(
-                title: const Text('Privacy Mode'),
-                subtitle: const Text('Hide sensitive content'),
-                value: _privacyModeEnabled,
-                onChanged: (value) {
-                  setState(() {
-                    _privacyModeEnabled = value;
-                  });
-                  _updateSetting('privacyModeEnabled', value);
-                },
-              ),
-            ],
-          ),
-
           // Security Section
           _buildSettingsSection(
             title: 'Security',
@@ -299,28 +236,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
-
-          // Developer Tools (available to all users)
-          _buildSettingsSection(
-            title: 'Developer Tools',
-            children: [
-              _buildSettingsItem(
-                icon: Icons.science,
-                title: 'Development Settings',
-                subtitle: 'Testing and data generation tools',
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const DevSettingsScreen(),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-
           // Account Actions Section
           _buildSettingsSection(
             title: 'Account Actions',
@@ -369,6 +284,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   // TODO: Implement Privacy Policy
                   _showErrorSnackBar('Feature coming soon');
                 },
+              ),
+            ],
+          ),
+
+          // Appearance Section
+          _buildSettingsSection(
+            title: 'Appearance',
+            children: [
+              _buildSettingsItem(
+                icon: Icons.dark_mode,
+                title: 'Dark Mode',
+                subtitle: 'Toggle between light and dark theme',
+                trailing: Consumer<ThemeService>(
+                  builder: (context, themeService, child) {
+                    return Switch(
+                      value: themeService.isDarkMode,
+                      onChanged: (value) {
+                        themeService.toggleTheme();
+                      },
+                      activeColor: Theme.of(context).colorScheme.primary,
+                    );
+                  },
+                ),
               ),
             ],
           ),

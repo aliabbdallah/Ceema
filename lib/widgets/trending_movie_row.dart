@@ -40,14 +40,15 @@ class _TrendingMovieRowState extends State<TrendingMovieRow> {
     try {
       // Different loading logic based on filterType
       List<Map<String, dynamic>> movieData;
+      final tmdbService = TMDBService();
 
       switch (widget.filterType) {
         case 'trending':
-          movieData = await TMDBService.getTrendingMovies();
+          movieData = await TMDBService.getTrendingMoviesRaw();
           break;
         // You can add more filter types here
         default:
-          movieData = await TMDBService.getTrendingMovies();
+          movieData = await TMDBService.getTrendingMoviesRaw();
       }
 
       if (mounted) {

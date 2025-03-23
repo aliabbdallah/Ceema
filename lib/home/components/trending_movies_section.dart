@@ -42,7 +42,8 @@ class _TrendingMoviesSectionState extends State<TrendingMoviesSection>
     });
 
     try {
-      final moviesData = await TMDBService.getTrendingMovies();
+      final tmdbService = TMDBService();
+      final moviesData = await TMDBService.getTrendingMoviesRaw();
       if (mounted) {
         setState(() {
           _trendingMovies =
