@@ -2,10 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/post.dart';
 import '../models/movie.dart';
 import 'notification_service.dart';
+import 'follow_service.dart';
 
 class PostService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final NotificationService _notificationService = NotificationService();
+  final FollowService _followService = FollowService();
 
   Future<void> createPost({
     required String userId,
@@ -40,14 +42,15 @@ class PostService {
         .limit(50) // Limit to most recent 50 posts for better performance
         .snapshots()
         .map((snapshot) {
-      final posts = snapshot.docs
-          .map((doc) => Post.fromJson(doc.data(), doc.id))
-          .toList();
+          final posts =
+              snapshot.docs
+                  .map((doc) => Post.fromJson(doc.data(), doc.id))
+                  .toList();
 
-      // Sort by creation time to ensure newest posts appear first
-      posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return posts;
-    });
+          // Sort by creation time to ensure newest posts appear first
+          posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return posts;
+        });
   }
 
   // Get posts for a specific user
@@ -58,69 +61,43 @@ class PostService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => Post.fromJson(doc.data(), doc.id))
-          .toList();
-    });
+          return snapshot.docs
+              .map((doc) => Post.fromJson(doc.data(), doc.id))
+              .toList();
+        });
   }
 
-  // Get posts from friends (users the current user follows)
-  Stream<List<Post>> getFriendsPosts(String userId) async* {
+  // Get posts from users that the current user follows
+  Stream<List<Post>> getFollowingPosts(String userId) async* {
     try {
-      // Get the list of users that the current user follows
-      final friendsSnapshot = await _firestore
-          .collection('friends')
-          .where('userId', isEqualTo: userId)
-          .get();
+      // Get list of users that the current user follows
+      final following = await _followService.getFollowing(userId).first;
+      final followingIds =
+          following.map((follow) => follow.followedId).toList();
 
-      // Extract friend IDs
-      final List<String> friendIds = friendsSnapshot.docs
-          .map((doc) => doc.data()['friendId'] as String)
-          .toList();
-
-      // Add the current user's ID to include their posts too
-      friendIds.add(userId);
-
-      // If the user doesn't follow anyone, just return their own posts
-      if (friendIds.length <= 1) {
-        yield* getUserPosts(userId);
+      if (followingIds.isEmpty) {
+        yield [];
         return;
       }
 
-      // Handle large friend lists by breaking into chunks of 10 (Firestore limit)
-      final chunks = <List<String>>[];
-      for (var i = 0; i < friendIds.length; i += 10) {
-        chunks.add(
-          friendIds.sublist(
-            i,
-            i + 10 > friendIds.length ? friendIds.length : i + 10,
-          ),
-        );
+      // Firestore has a limit of 10 values in whereIn, so we need to chunk the list
+      for (var i = 0; i < followingIds.length; i += 10) {
+        final chunk = followingIds.skip(i).take(10).toList();
+        final querySnapshot =
+            await _firestore
+                .collection('posts')
+                .where('userId', whereIn: chunk)
+                .orderBy('createdAt', descending: true)
+                .get();
+
+        final posts =
+            querySnapshot.docs
+                .map((doc) => Post.fromJson(doc.data(), doc.id))
+                .toList();
+        yield posts;
       }
-
-      // Query each chunk and combine results
-      yield* Stream.periodic(const Duration(seconds: 5), (_) async {
-        final allPosts = <Post>[];
-
-        for (final chunk in chunks) {
-          final snapshot = await _firestore
-              .collection('posts')
-              .where('userId', whereIn: chunk)
-              .orderBy('createdAt', descending: true)
-              .get();
-
-          allPosts.addAll(
-            snapshot.docs.map((doc) => Post.fromJson(doc.data(), doc.id)),
-          );
-        }
-
-        // Sort all posts by creation time
-        allPosts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return allPosts;
-      }).asyncMap((future) => future);
     } catch (e) {
-      print('Error getting friends posts: $e');
-      // Return an empty list in case of error
+      print('Error getting following posts: $e');
       yield [];
     }
   }
@@ -140,13 +117,13 @@ class PostService {
       if (likes.contains(userId)) {
         // Unlike
         await postRef.update({
-          'likes': FieldValue.arrayRemove([userId])
+          'likes': FieldValue.arrayRemove([userId]),
         });
         // No notification for unlikes
       } else {
         // Like
         await postRef.update({
-          'likes': FieldValue.arrayUnion([userId])
+          'likes': FieldValue.arrayUnion([userId]),
         });
 
         // Notify the post owner about the like
@@ -179,7 +156,7 @@ class PostService {
 
     if (post.exists) {
       await postRef.update({
-        'shares': FieldValue.arrayUnion([userId])
+        'shares': FieldValue.arrayUnion([userId]),
       });
     }
   }
@@ -193,17 +170,15 @@ class PostService {
         .orderBy('createdAt', descending: false) // Show oldest comments first
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        return {
-          'id': doc.id,
-          ...data,
-          'createdAt': data['createdAt'] != null
-              ? (data['createdAt'] as Timestamp).toDate()
-              : DateTime.now(),
-        };
-      }).toList();
-    });
+          return snapshot.docs.map((doc) {
+            final data = doc.data();
+            return {
+              'id': doc.id,
+              ...data,
+              'createdAt': data['createdAt']?.toDate() ?? DateTime.now(),
+            };
+          }).toList();
+        });
   }
 
   // Add a comment to a post
@@ -273,12 +248,12 @@ class PostService {
       if (likes.contains(userId)) {
         // Unlike
         await commentRef.update({
-          'likes': FieldValue.arrayRemove([userId])
+          'likes': FieldValue.arrayRemove([userId]),
         });
       } else {
         // Like
         await commentRef.update({
-          'likes': FieldValue.arrayUnion([userId])
+          'likes': FieldValue.arrayUnion([userId]),
         });
       }
     }
@@ -315,9 +290,9 @@ class PostService {
         .limit(limit)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => Post.fromJson(doc.data(), doc.id))
-          .toList();
-    });
+          return snapshot.docs
+              .map((doc) => Post.fromJson(doc.data(), doc.id))
+              .toList();
+        });
   }
 }

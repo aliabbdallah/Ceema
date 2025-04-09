@@ -24,14 +24,14 @@ class NotificationService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        return app_notification.Notification.fromMap({
-          'id': doc.id,
-          ...data,
+          return snapshot.docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return app_notification.Notification.fromMap({
+              'id': doc.id,
+              ...data,
+            });
+          }).toList();
         });
-      }).toList();
-    });
   }
 
   // Get unread notification count
@@ -51,9 +51,7 @@ class NotificationService {
   Future<void> markAsRead(String notificationId) async {
     if (_currentUserId == null) return;
 
-    await _notificationsCollection.doc(notificationId).update({
-      'isRead': true,
-    });
+    await _notificationsCollection.doc(notificationId).update({'isRead': true});
   }
 
   // Mark all notifications as read
@@ -61,54 +59,17 @@ class NotificationService {
     if (_currentUserId == null) return;
 
     final batch = _firestore.batch();
-    final unreadNotifications = await _notificationsCollection
-        .where('userId', isEqualTo: _currentUserId)
-        .where('isRead', isEqualTo: false)
-        .get();
+    final unreadNotifications =
+        await _notificationsCollection
+            .where('userId', isEqualTo: _currentUserId)
+            .where('isRead', isEqualTo: false)
+            .get();
 
     for (var doc in unreadNotifications.docs) {
       batch.update(doc.reference, {'isRead': true});
     }
 
     await batch.commit();
-  }
-
-  // Create a friend request notification
-  Future<void> createFriendRequestNotification({
-    required String recipientUserId,
-    required String senderUserId,
-    required String senderName,
-    String? senderPhotoUrl,
-  }) async {
-    await _createNotification(
-      userId: recipientUserId,
-      title: 'New Friend Request',
-      body: '$senderName sent you a friend request',
-      type: app_notification.NotificationType.friendRequest,
-      senderUserId: senderUserId,
-      senderName: senderName,
-      senderPhotoUrl: senderPhotoUrl,
-      referenceId: senderUserId,
-    );
-  }
-
-  // Create a friend accepted notification
-  Future<void> createFriendAcceptedNotification({
-    required String recipientUserId,
-    required String senderUserId,
-    required String senderName,
-    String? senderPhotoUrl,
-  }) async {
-    await _createNotification(
-      userId: recipientUserId,
-      title: 'Friend Request Accepted',
-      body: '$senderName accepted your friend request',
-      type: app_notification.NotificationType.friendAccepted,
-      senderUserId: senderUserId,
-      senderName: senderName,
-      senderPhotoUrl: senderPhotoUrl,
-      referenceId: senderUserId,
-    );
   }
 
   // Create a post like notification
@@ -167,6 +128,60 @@ class NotificationService {
     );
   }
 
+  // Create a follow notification
+  Future<void> createFollowNotification({
+    required String recipientUserId,
+    required String senderUserId,
+    required String senderName,
+    required String senderPhotoUrl,
+  }) async {
+    await _createNotification(
+      userId: recipientUserId,
+      title: 'New Follower',
+      body: '$senderName started following you',
+      type: app_notification.NotificationType.follow,
+      senderUserId: senderUserId,
+      senderName: senderName,
+      senderPhotoUrl: senderPhotoUrl,
+    );
+  }
+
+  // Create a follow request notification
+  Future<void> createFollowRequestNotification({
+    required String recipientUserId,
+    required String senderUserId,
+    required String senderName,
+    required String senderPhotoUrl,
+  }) async {
+    await _createNotification(
+      userId: recipientUserId,
+      title: 'Follow Request',
+      body: '$senderName wants to follow you',
+      type: app_notification.NotificationType.followRequest,
+      senderUserId: senderUserId,
+      senderName: senderName,
+      senderPhotoUrl: senderPhotoUrl,
+    );
+  }
+
+  // Create a follow request accepted notification
+  Future<void> createFollowRequestAcceptedNotification({
+    required String recipientUserId,
+    required String senderUserId,
+    required String senderName,
+    required String senderPhotoUrl,
+  }) async {
+    await _createNotification(
+      userId: recipientUserId,
+      title: 'Follow Request Accepted',
+      body: '$senderName accepted your follow request',
+      type: app_notification.NotificationType.followRequestAccepted,
+      senderUserId: senderUserId,
+      senderName: senderName,
+      senderPhotoUrl: senderPhotoUrl,
+    );
+  }
+
   // Helper method to create notifications
   Future<void> _createNotification({
     required String userId,
@@ -202,9 +217,10 @@ class NotificationService {
     if (_currentUserId == null) return;
 
     final batch = _firestore.batch();
-    final notifications = await _notificationsCollection
-        .where('userId', isEqualTo: _currentUserId)
-        .get();
+    final notifications =
+        await _notificationsCollection
+            .where('userId', isEqualTo: _currentUserId)
+            .get();
 
     for (var doc in notifications.docs) {
       batch.delete(doc.reference);

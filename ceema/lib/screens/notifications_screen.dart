@@ -4,10 +4,14 @@ import 'package:ceema/services/notification_service.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:ceema/screens/profile_screen.dart';
 import 'package:ceema/screens/user_profile_screen.dart';
-import 'package:ceema/screens/friends_screen.dart';
+import 'package:ceema/screens/followers_screen.dart';
 import 'package:ceema/screens/timeline_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ceema/widgets/profile_image_widget.dart';
+import 'package:ceema/screens/follow_requests_screen.dart';
+import 'package:ceema/screens/comments_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ceema/models/post.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({Key? key}) : super(key: key);
@@ -36,9 +40,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       await _notificationService.markAllAsRead();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
       }
     } finally {
       if (mounted) {
@@ -63,16 +67,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           Text(
             'No notifications yet',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             'You\'ll be notified about friend requests,\nlikes, comments and more',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -82,16 +86,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void _handleNotificationTap(app_notification.Notification notification) {
     // Navigate based on notification type
     switch (notification.type) {
-      case app_notification.NotificationType.friendRequest:
-      case app_notification.NotificationType.friendAccepted:
+      case app_notification.NotificationType.followRequest:
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const FollowRequestsScreen()),
+        );
+        break;
+      case app_notification.NotificationType.follow:
+      case app_notification.NotificationType.followRequestAccepted:
         final currentUser = FirebaseAuth.instance.currentUser;
         if (currentUser != null) {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => FriendsScreen(
-                userId: currentUser.uid,
-              ),
+              builder:
+                  (context) => FollowersScreen(targetUserId: currentUser.uid),
             ),
           );
         }
@@ -99,14 +108,32 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case app_notification.NotificationType.postLike:
       case app_notification.NotificationType.postComment:
         if (notification.referenceId != null) {
-          // Navigate to post (if we had a specific PostScreen we would navigate there)
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) =>
-                  const TimelineScreen(), // This is a placeholder
-            ),
-          );
+          // Fetch the post data and navigate to comments screen
+          FirebaseFirestore.instance
+              .collection('posts')
+              .doc(notification.referenceId)
+              .get()
+              .then((doc) {
+                if (doc.exists) {
+                  final post = Post.fromJson(doc.data()!, doc.id);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => CommentsScreen(post: post),
+                    ),
+                  );
+                } else {
+                  // If post not found, show error
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Post not found')),
+                  );
+                }
+              })
+              .catchError((error) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: ${error.toString()}')),
+                );
+              });
         }
         break;
       case app_notification.NotificationType.systemNotice:
@@ -123,11 +150,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     Color iconColor;
 
     switch (notification.type) {
-      case app_notification.NotificationType.friendRequest:
+      case app_notification.NotificationType.follow:
         iconData = Icons.person_add_outlined;
         iconColor = Colors.blue;
         break;
-      case app_notification.NotificationType.friendAccepted:
+      case app_notification.NotificationType.followRequest:
+        iconData = Icons.person_add_outlined;
+        iconColor = Colors.blue;
+        break;
+      case app_notification.NotificationType.followRequestAccepted:
         iconData = Icons.people_outline;
         iconColor = Colors.green;
         break;
@@ -151,10 +182,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         color: colorScheme.errorContainer,
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        child: Icon(
-          Icons.delete_outline,
-          color: colorScheme.onErrorContainer,
-        ),
+        child: Icon(Icons.delete_outline, color: colorScheme.onErrorContainer),
       ),
       direction: DismissDirection.endToStart,
       onDismissed: (direction) {
@@ -180,9 +208,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
           decoration: BoxDecoration(
-            color: notification.isRead
-                ? colorScheme.surface
-                : colorScheme.primaryContainer.withOpacity(0.1),
+            color:
+                notification.isRead
+                    ? colorScheme.surface
+                    : colorScheme.primaryContainer.withOpacity(0.1),
             border: Border(
               bottom: BorderSide(
                 color: colorScheme.outlineVariant.withOpacity(0.3),
@@ -204,11 +233,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 CircleAvatar(
                   backgroundColor: iconColor.withOpacity(0.1),
                   radius: 24,
-                  child: Icon(
-                    iconData,
-                    color: iconColor,
-                    size: 24,
-                  ),
+                  child: Icon(iconData, color: iconColor, size: 24),
                 ),
               const SizedBox(width: 16),
               Expanded(
@@ -218,24 +243,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     Text(
                       notification.title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: notification.isRead
+                        fontWeight:
+                            notification.isRead
                                 ? FontWeight.normal
                                 : FontWeight.bold,
-                          ),
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       notification.body,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       timeago.format(notification.createdAt),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colorScheme.outline,
-                          ),
+                        color: colorScheme.outline,
+                      ),
                     ),
                   ],
                 ),
@@ -258,73 +284,74 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               if (value == 'clear_all') {
                 showDialog(
                   context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Clear All Notifications'),
-                    content: const Text(
-                      'Are you sure you want to delete all notifications? This cannot be undone.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('CANCEL'),
+                  builder:
+                      (context) => AlertDialog(
+                        title: const Text('Clear All Notifications'),
+                        content: const Text(
+                          'Are you sure you want to delete all notifications? This cannot be undone.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('CANCEL'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _notificationService.deleteAllNotifications();
+                            },
+                            child: const Text('DELETE'),
+                          ),
+                        ],
                       ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _notificationService.deleteAllNotifications();
-                        },
-                        child: const Text('DELETE'),
-                      ),
-                    ],
-                  ),
                 );
               }
             },
-            itemBuilder: (context) => [
-              const PopupMenuItem<String>(
-                value: 'clear_all',
-                child: Row(
-                  children: [
-                    Icon(Icons.delete_sweep_outlined),
-                    SizedBox(width: 8),
-                    Text('Clear all notifications'),
-                  ],
-                ),
-              ),
-            ],
-          )
+            itemBuilder:
+                (context) => [
+                  const PopupMenuItem<String>(
+                    value: 'clear_all',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_sweep_outlined),
+                        SizedBox(width: 8),
+                        Text('Clear all notifications'),
+                      ],
+                    ),
+                  ),
+                ],
+          ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : StreamBuilder<List<app_notification.Notification>>(
-              stream: _notificationService.getUserNotifications(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : StreamBuilder<List<app_notification.Notification>>(
+                stream: _notificationService.getUserNotifications(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text('Error: ${snapshot.error}'),
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error: ${snapshot.error}'));
+                  }
+
+                  final notifications = snapshot.data ?? [];
+
+                  if (notifications.isEmpty) {
+                    return _buildEmptyState();
+                  }
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.only(top: 8),
+                    itemCount: notifications.length,
+                    itemBuilder: (context, index) {
+                      return _buildNotificationItem(notifications[index]);
+                    },
                   );
-                }
-
-                final notifications = snapshot.data ?? [];
-
-                if (notifications.isEmpty) {
-                  return _buildEmptyState();
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.only(top: 8),
-                  itemCount: notifications.length,
-                  itemBuilder: (context, index) {
-                    return _buildNotificationItem(notifications[index]);
-                  },
-                );
-              },
-            ),
+                },
+              ),
     );
   }
 }

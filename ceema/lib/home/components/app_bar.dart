@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ceema/screens/user_search_screen.dart';
-import 'package:ceema/screens/friends_screen.dart';
+import 'package:ceema/screens/followers_screen.dart';
 import 'package:ceema/screens/notifications_screen.dart';
 import 'package:ceema/services/notification_service.dart';
 
@@ -27,10 +27,7 @@ class CustomAppBar extends StatelessWidget {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [
-                  Colors.purple.shade300,
-                  Colors.blue.shade500,
-                ],
+                colors: [Colors.purple.shade300, Colors.blue.shade500],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -48,26 +45,23 @@ class CustomAppBar extends StatelessWidget {
           const SizedBox(width: 8),
           const Text(
             'Ceema',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 22,
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
           ),
         ],
       ),
       actions: [
         IconButton(
           icon: const Icon(Icons.people_outline),
-          tooltip: 'Friends',
+          tooltip: 'Following',
           onPressed: () {
             final currentUser = FirebaseAuth.instance.currentUser;
             if (currentUser != null) {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => FriendsScreen(
-                    userId: currentUser.uid,
-                  ),
+                  builder:
+                      (context) =>
+                          FollowersScreen(targetUserId: currentUser.uid),
                 ),
               );
             }
@@ -79,9 +73,7 @@ class CustomAppBar extends StatelessWidget {
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (context) => const UserSearchScreen(),
-              ),
+              MaterialPageRoute(builder: (context) => const UserSearchScreen()),
             );
           },
         ),
@@ -118,32 +110,33 @@ class CustomAppBar extends StatelessWidget {
                       color: colorScheme.error,
                       shape: BoxShape.circle,
                     ),
-                    child: unreadCount > 9
-                        ? Text(
-                            '9+',
-                            style: TextStyle(
-                              color: colorScheme.onError,
-                              fontSize: 8,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )
-                        : unreadCount > 1
+                    child:
+                        unreadCount > 9
                             ? Text(
-                                '$unreadCount',
-                                style: TextStyle(
-                                  color: colorScheme.onError,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
-                            : Container(
-                                width: 4,
-                                height: 4,
-                                decoration: BoxDecoration(
-                                  color: colorScheme.onError,
-                                  shape: BoxShape.circle,
-                                ),
+                              '9+',
+                              style: TextStyle(
+                                color: colorScheme.onError,
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
                               ),
+                            )
+                            : unreadCount > 1
+                            ? Text(
+                              '$unreadCount',
+                              style: TextStyle(
+                                color: colorScheme.onError,
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )
+                            : Container(
+                              width: 4,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: colorScheme.onError,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
                   ),
                 );
               },

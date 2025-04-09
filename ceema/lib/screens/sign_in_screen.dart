@@ -39,71 +39,72 @@ class _SignInScreenState extends State<SignInScreen> {
     });
 
     try {
-      final UserCredential userCredential =
-          await _auth.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
+      final UserCredential userCredential = await _auth
+          .signInWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
 
       if (mounted && userCredential.user != null) {
         // Check if email is verified
         if (!userCredential.user!.emailVerified) {
-          // Update the Firestore document to reflect the current verification status
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(userCredential.user!.uid)
-              .update({'emailVerified': false});
-
           // Sign out the user since email is not verified
           await _auth.signOut();
 
-          // Show a message about email verification requirement
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Email verification required. Please verify your email before signing in.',
-              ),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 5),
-              action: SnackBarAction(
-                label: 'Resend',
-                onPressed: () async {
-                  try {
-                    // Sign in again temporarily to send verification email
-                    final tempCredential =
-                        await _auth.signInWithEmailAndPassword(
-                      email: _emailController.text.trim(),
-                      password: _passwordController.text,
-                    );
+          // Show a message about email verification requirement with resend option
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text(
+                  'Email verification required. Please verify your email before signing in.',
+                ),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 5),
+                action: SnackBarAction(
+                  label: 'Resend',
+                  textColor: Colors.white,
+                  onPressed: () async {
+                    try {
+                      // Sign in again temporarily to send verification email
+                      final tempCredential = await _auth
+                          .signInWithEmailAndPassword(
+                            email: _emailController.text.trim(),
+                            password: _passwordController.text,
+                          );
 
-                    await tempCredential.user!.sendEmailVerification();
-                    await _auth.signOut(); // Sign out again
+                      await tempCredential.user!.sendEmailVerification();
+                      await _auth.signOut();
 
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                            'Verification email sent! Please check your inbox.'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error sending email: $e'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                },
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Verification email sent! Please check your inbox.',
+                            ),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error sending email: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
               ),
-            ),
-          );
+            );
+          }
 
           // Set loading to false since we're staying on the sign-in screen
           setState(() {
             _isLoading = false;
           });
-
           return; // Stop here, don't proceed to home screen
         } else {
           // If email is verified, update the Firestore document
@@ -114,9 +115,7 @@ class _SignInScreenState extends State<SignInScreen> {
 
           // Successfully signed in
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => const HomeScreen(),
-            ),
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
           );
         }
       }
@@ -145,19 +144,13 @@ class _SignInScreenState extends State<SignInScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -186,18 +179,18 @@ class _SignInScreenState extends State<SignInScreen> {
                   child: Text(
                     'Ceema',
                     style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).primaryColor,
-                        ),
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).primaryColor,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
                 Center(
                   child: Text(
                     'Your Social Movie Diary',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: Colors.grey[600],
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
                   ),
                 ),
                 const SizedBox(height: 48),
@@ -301,20 +294,22 @@ class _SignInScreenState extends State<SignInScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
+                  child:
+                      _isLoading
+                          ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                          : const Text(
+                            'Sign In',
+                            style: TextStyle(fontSize: 16),
                           ),
-                        )
-                      : const Text(
-                          'Sign In',
-                          style: TextStyle(fontSize: 16),
-                        ),
                 ),
                 const SizedBox(height: 16),
 

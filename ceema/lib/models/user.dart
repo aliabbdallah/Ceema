@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'podium_movie.dart';
 
 class UserModel {
   final String id;
@@ -12,7 +13,9 @@ class UserModel {
   final int followingCount;
   final int mutualFriendsCount;
   final int watchlistCount;
+  final int movieCount;
   final bool emailVerified;
+  final List<PodiumMovie> podiumMovies;
 
   UserModel({
     required this.id,
@@ -26,7 +29,9 @@ class UserModel {
     this.followingCount = 0,
     this.mutualFriendsCount = 0,
     this.watchlistCount = 0,
+    this.movieCount = 0,
     this.emailVerified = false,
+    this.podiumMovies = const [],
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json, String documentId) {
@@ -42,7 +47,13 @@ class UserModel {
       followingCount: json['followingCount'] ?? 0,
       mutualFriendsCount: json['mutualFriendsCount'] ?? 0,
       watchlistCount: json['watchlistCount'] ?? 0,
+      movieCount: json['movieCount'] ?? 0,
       emailVerified: json['emailVerified'] ?? false,
+      podiumMovies:
+          (json['podiumMovies'] as List?)
+              ?.map((movie) => PodiumMovie.fromJson(movie))
+              .toList() ??
+          [],
     );
   }
 
@@ -58,7 +69,9 @@ class UserModel {
       'followingCount': followingCount,
       'mutualFriendsCount': mutualFriendsCount,
       'watchlistCount': watchlistCount,
+      'movieCount': movieCount,
       'emailVerified': emailVerified,
+      'podiumMovies': podiumMovies.map((movie) => movie.toJson()).toList(),
     };
   }
 
@@ -73,7 +86,9 @@ class UserModel {
     int? followingCount,
     int? mutualFriendsCount,
     int? watchlistCount,
+    int? movieCount,
     bool? emailVerified,
+    List<PodiumMovie>? podiumMovies,
   }) {
     return UserModel(
       id: id,
@@ -87,7 +102,9 @@ class UserModel {
       followingCount: followingCount ?? this.followingCount,
       mutualFriendsCount: mutualFriendsCount ?? this.mutualFriendsCount,
       watchlistCount: watchlistCount ?? this.watchlistCount,
+      movieCount: movieCount ?? this.movieCount,
       emailVerified: emailVerified ?? this.emailVerified,
+      podiumMovies: podiumMovies ?? this.podiumMovies,
     );
   }
 }

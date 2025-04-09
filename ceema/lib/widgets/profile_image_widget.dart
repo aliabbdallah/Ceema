@@ -16,8 +16,6 @@ class ProfileImageWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     // If no image URL, show a placeholder with the first letter of the name
     if (imageUrl == null || imageUrl!.isEmpty) {
-      print(
-          'ProfileImageWidget: No image URL provided, using fallback with name: $fallbackName');
       return CircleAvatar(
         radius: radius,
         backgroundColor: Theme.of(context).primaryColor.withOpacity(0.2),
@@ -34,26 +32,19 @@ class ProfileImageWidget extends StatelessWidget {
 
     // Check if the URL is for an asset or a network image
     if (imageUrl!.startsWith('assets/')) {
-      // Asset image (preset avatar)
-      print('ProfileImageWidget: Using asset image: $imageUrl');
       return CircleAvatar(
         radius: radius,
         backgroundImage: AssetImage(imageUrl!),
       );
     } else if (imageUrl!.startsWith('http')) {
-      // Network image (from Firebase Storage)
-      print('ProfileImageWidget: Using network image: $imageUrl');
       return CircleAvatar(
         radius: radius,
         backgroundImage: NetworkImage(imageUrl!),
         onBackgroundImageError: (exception, stackTrace) {
-          print('Error loading profile image: $exception');
+          // Silently handle error and show fallback
         },
       );
     } else {
-      // Fallback case
-      print(
-          'ProfileImageWidget: Unknown image URL format: $imageUrl, using icon fallback');
       return CircleAvatar(
         radius: radius,
         backgroundColor: Theme.of(context).primaryColor.withOpacity(0.2),

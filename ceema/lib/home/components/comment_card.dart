@@ -9,11 +9,8 @@ class CommentCard extends StatefulWidget {
   final Map<String, dynamic> comment;
   final Function onDelete;
 
-  const CommentCard({
-    Key? key,
-    required this.comment,
-    required this.onDelete,
-  }) : super(key: key);
+  const CommentCard({Key? key, required this.comment, required this.onDelete})
+    : super(key: key);
 
   @override
   State<CommentCard> createState() => _CommentCardState();
@@ -27,14 +24,17 @@ class _CommentCardState extends State<CommentCard> {
   @override
   void initState() {
     super.initState();
-    _isLiked =
-        (widget.comment['likes'] as List).contains(_auth.currentUser?.uid);
+    _isLiked = (widget.comment['likes'] as List).contains(
+      _auth.currentUser?.uid,
+    );
   }
 
   Future<void> _handleLike() async {
     try {
       await _postService.toggleCommentLike(
-          widget.comment['id'], _auth.currentUser!.uid);
+        widget.comment['id'],
+        _auth.currentUser!.uid,
+      );
       setState(() {
         _isLiked = !_isLiked;
       });
@@ -56,77 +56,76 @@ class _CommentCardState extends State<CommentCard> {
 
     showModalBottomSheet(
       context: context,
-      builder: (context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isCurrentUser) ...[
-            ListTile(
-              leading: const Icon(Icons.delete, color: Colors.red),
-              title: const Text('Delete Comment',
-                  style: TextStyle(color: Colors.red)),
-              onTap: () async {
-                Navigator.pop(context);
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Delete Comment'),
-                    content: const Text(
-                        'Are you sure you want to delete this comment?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Delete',
-                            style: TextStyle(color: Colors.red)),
-                      ),
-                    ],
+      builder:
+          (context) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isCurrentUser) ...[
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: const Text(
+                    'Delete Comment',
+                    style: TextStyle(color: Colors.red),
                   ),
-                );
-
-                if (confirmed == true && mounted) {
-                  try {
-                    await _postService.deleteComment(
-                      widget.comment['id'],
-                      widget.comment['postId'],
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder:
+                          (context) => AlertDialog(
+                            title: const Text('Delete Comment'),
+                            content: const Text(
+                              'Are you sure you want to delete this comment?',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancel'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text(
+                                  'Delete',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ),
+                            ],
+                          ),
                     );
-                    widget.onDelete();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Comment deleted')),
-                      );
+
+                    if (confirmed == true && mounted) {
+                      try {
+                        await _postService.deleteComment(
+                          widget.comment['id'],
+                          widget.comment['postId'],
+                        );
+                        widget.onDelete();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Comment deleted')),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error deleting comment: $e'),
+                            ),
+                          );
+                        }
+                      }
                     }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error deleting comment: $e')),
-                      );
-                    }
-                  }
-                }
-              },
-            ),
-          ],
-          ListTile(
-            leading: const Icon(Icons.report),
-            title: const Text('Report Comment'),
-            onTap: () {
-              // TODO: Implement report functionality
-              Navigator.pop(context);
-            },
+                  },
+                ),
+              ],
+            ],
           ),
-        ],
-      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final DateTime createdAt = widget.comment['createdAt'] != null
-        ? (widget.comment['createdAt'] as Timestamp).toDate()
-        : DateTime.now();
+    final DateTime createdAt = widget.comment['createdAt'];
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -139,10 +138,11 @@ class _CommentCardState extends State<CommentCard> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => UserProfileScreen(
-                      userId: widget.comment['userId'],
-                      username: widget.comment['userName'],
-                    ),
+                    builder:
+                        (context) => UserProfileScreen(
+                          userId: widget.comment['userId'],
+                          username: widget.comment['userName'],
+                        ),
                   ),
                 );
               }
@@ -192,10 +192,9 @@ class _CommentCardState extends State<CommentCard> {
                         timeago.format(createdAt),
                         style: TextStyle(
                           fontSize: 12,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withOpacity(0.6),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.6),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -207,12 +206,12 @@ class _CommentCardState extends State<CommentCard> {
                             fontSize: 12,
                             fontWeight:
                                 _isLiked ? FontWeight.bold : FontWeight.normal,
-                            color: _isLiked
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withOpacity(0.6),
+                            color:
+                                _isLiked
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withOpacity(0.6),
                           ),
                         ),
                       ),
@@ -222,10 +221,9 @@ class _CommentCardState extends State<CommentCard> {
                           (widget.comment['likes'] as List).length.toString(),
                           style: TextStyle(
                             fontSize: 12,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withOpacity(0.6),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.6),
                           ),
                         ),
                     ],

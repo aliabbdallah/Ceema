@@ -18,10 +18,7 @@ import 'actor_details_screen.dart';
 class MovieDetailsScreen extends StatefulWidget {
   final Movie movie;
 
-  const MovieDetailsScreen({
-    Key? key,
-    required this.movie,
-  }) : super(key: key);
+  const MovieDetailsScreen({Key? key, required this.movie}) : super(key: key);
 
   @override
   _MovieDetailsScreenState createState() => _MovieDetailsScreenState();
@@ -40,6 +37,8 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
   List<YoutubePlayerController> _videoControllers = [];
   bool _isOverviewExpanded = false;
   bool _isCrewExpanded = false;
+  bool _isFullscreen = false;
+  int? _currentFullscreenVideoIndex;
 
   bool _isLoading = true;
   bool _isInWatchlist = false;
@@ -59,10 +58,12 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    _tabController = TabController(length: 4, vsync: this);
-    _confettiController =
-        ConfettiController(duration: const Duration(seconds: 2));
+    _tabController = TabController(length: 3, vsync: this);
+    _confettiController = ConfettiController(
+      duration: const Duration(seconds: 2),
+    );
     _scrollController = ScrollController();
+
     _loadMovieDetails();
     _checkWatchlistStatus();
     _checkUserRating();
@@ -78,32 +79,74 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
     for (var controller in _videoControllers) {
       controller.dispose();
     }
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
     super.dispose();
   }
 
-  Future<void> _handleFullscreenChange(bool isFullscreen) async {
-    if (isFullscreen) {
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
-    } else {
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-        DeviceOrientation.portraitDown,
-      ]);
+  Future<void> _loadMovieDetails() async {
+    try {
+      final tmdbService = TMDBService();
+      final details = await TMDBService.getMovieDetailsRaw(widget.movie.id);
+      final similar = await TMDBService.getSimilarMovies(widget.movie.id);
+      final cast = await TMDBService.getCast(widget.movie.id);
+      final crew = await TMDBService.getCrew(widget.movie.id);
+      final videos = await TMDBService.getVideos(widget.movie.id);
+
+      // Initialize video controllers
+      _videoControllers =
+          videos.map((video) {
+            return YoutubePlayerController(
+              initialVideoId: video['key'],
+              flags: const YoutubePlayerFlags(
+                autoPlay: false,
+                mute: false,
+                disableDragSeek: false,
+                loop: false,
+                isLive: false,
+                forceHD: false,
+                enableCaption: true,
+              ),
+            );
+          }).toList();
+
+      if (mounted) {
+        setState(() {
+          _movieDetails = details;
+          _similarMovies = similar;
+          _cast = cast;
+          _crew = crew;
+          _videos = videos;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading movie details: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _checkUserRating() async {
     try {
       // Check if user has already rated this movie in their diary
-      final querySnapshot = await _firestore
-          .collection('diary_entries')
-          .where('userId', isEqualTo: _auth.currentUser!.uid)
-          .where('movieId', isEqualTo: widget.movie.id)
-          .limit(1)
-          .get();
+      final querySnapshot =
+          await _firestore
+              .collection('diary_entries')
+              .where('userId', isEqualTo: _auth.currentUser!.uid)
+              .where('movieId', isEqualTo: widget.movie.id)
+              .limit(1)
+              .get();
 
       if (querySnapshot.docs.isNotEmpty) {
         final data = querySnapshot.docs.first.data();
@@ -127,12 +170,13 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
 
     try {
       // Check if user already has a diary entry for this movie
-      final querySnapshot = await _firestore
-          .collection('diary_entries')
-          .where('userId', isEqualTo: _auth.currentUser!.uid)
-          .where('movieId', isEqualTo: widget.movie.id)
-          .limit(1)
-          .get();
+      final querySnapshot =
+          await _firestore
+              .collection('diary_entries')
+              .where('userId', isEqualTo: _auth.currentUser!.uid)
+              .where('movieId', isEqualTo: widget.movie.id)
+              .limit(1)
+              .get();
 
       if (querySnapshot.docs.isNotEmpty) {
         // Update existing entry
@@ -173,82 +217,13 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
     }
   }
 
-  Future<void> _loadMovieDetails() async {
-    try {
-      final tmdbService = TMDBService();
-      final details = await TMDBService.getMovieDetailsRaw(widget.movie.id);
-      final similar = await TMDBService.getSimilarMovies(widget.movie.id);
-      final cast = await TMDBService.getCast(widget.movie.id);
-      final crew = await TMDBService.getCrew(widget.movie.id);
-      final videos = await TMDBService.getVideos(widget.movie.id);
-
-      // Initialize video controllers
-      _videoControllers = videos.map((video) {
-        final controller = YoutubePlayerController(
-          initialVideoId: video['key'],
-          flags: const YoutubePlayerFlags(
-            autoPlay: false,
-            mute: false,
-            disableDragSeek: false,
-            loop: false,
-            isLive: false,
-            forceHD: false,
-            enableCaption: true,
-            hideControls: false,
-            controlsVisibleAtStart: true,
-            useHybridComposition: true,
-          ),
-        );
-
-        // Add listener for fullscreen changes
-        controller.addListener(() {
-          if (controller.value.isFullScreen) {
-            SystemChrome.setPreferredOrientations([
-              DeviceOrientation.landscapeLeft,
-              DeviceOrientation.landscapeRight,
-            ]);
-          } else {
-            SystemChrome.setPreferredOrientations([
-              DeviceOrientation.portraitUp,
-              DeviceOrientation.portraitDown,
-            ]);
-          }
-        });
-
-        return controller;
-      }).toList();
-
-      if (mounted) {
-        setState(() {
-          _movieDetails = details;
-          _similarMovies = similar;
-          _cast = cast;
-          _crew = crew;
-          _videos = videos;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading movie details: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _checkWatchlistStatus() async {
     try {
-      final doc = await _firestore
-          .collection('watchlists')
-          .doc(_auth.currentUser!.uid)
-          .get();
+      final doc =
+          await _firestore
+              .collection('watchlists')
+              .doc(_auth.currentUser!.uid)
+              .get();
 
       if (mounted && doc.exists) {
         final List<dynamic> watchlist = doc.data()?['movies'] ?? [];
@@ -265,12 +240,13 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
     try {
       if (_isInWatchlist) {
         // Get the watchlist item ID first
-        final querySnapshot = await _firestore
-            .collection('watchlist_items')
-            .where('userId', isEqualTo: _auth.currentUser!.uid)
-            .where('movie.id', isEqualTo: widget.movie.id)
-            .limit(1)
-            .get();
+        final querySnapshot =
+            await _firestore
+                .collection('watchlist_items')
+                .where('userId', isEqualTo: _auth.currentUser!.uid)
+                .where('movie.id', isEqualTo: widget.movie.id)
+                .limit(1)
+                .get();
 
         if (querySnapshot.docs.isNotEmpty) {
           await _watchlistService.removeFromWatchlist(
@@ -313,20 +289,22 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
 
   Future<void> _loadActivityFeed() async {
     try {
-      final querySnapshot = await _firestore
-          .collection('diary_entries')
-          .where('movieId', isEqualTo: widget.movie.id)
-          .orderBy('timestamp', descending: true)
-          .limit(10)
-          .get();
+      final querySnapshot =
+          await _firestore
+              .collection('diary_entries')
+              .where('movieId', isEqualTo: widget.movie.id)
+              .orderBy('timestamp', descending: true)
+              .limit(10)
+              .get();
 
       final List<Map<String, dynamic>> activities = [];
 
       for (var doc in querySnapshot.docs) {
-        final userDoc = await _firestore
-            .collection('users')
-            .doc(doc.data()['userId'])
-            .get();
+        final userDoc =
+            await _firestore
+                .collection('users')
+                .doc(doc.data()['userId'])
+                .get();
 
         if (userDoc.exists) {
           activities.add({
@@ -357,9 +335,9 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
           padding: const EdgeInsets.all(16),
           child: Text(
             'Recent Activity',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
         ),
         ListView.builder(
@@ -374,12 +352,14 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
 
             return ListTile(
               leading: CircleAvatar(
-                backgroundImage: user['photoURL'] != null
-                    ? NetworkImage(user['photoURL'])
-                    : null,
-                child: user['photoURL'] == null
-                    ? Text(user['displayName'][0].toUpperCase())
-                    : null,
+                backgroundImage:
+                    user['photoURL'] != null
+                        ? NetworkImage(user['photoURL'])
+                        : null,
+                child:
+                    user['photoURL'] == null
+                        ? Text(user['displayName'][0].toUpperCase())
+                        : null,
               ),
               title: Text(user['displayName'] ?? 'Anonymous'),
               subtitle: Column(
@@ -392,22 +372,23 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                   if (timestamp != null)
                     Text(
                       _formatTimestamp(timestamp),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.grey[600],
-                          ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                     ),
                 ],
               ),
-              trailing: activityData['rating'] != null
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.star, color: Colors.amber, size: 16),
-                        const SizedBox(width: 4),
-                        Text(activityData['rating'].toString()),
-                      ],
-                    )
-                  : null,
+              trailing:
+                  activityData['rating'] != null
+                      ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.star, color: Colors.amber, size: 16),
+                          const SizedBox(width: 4),
+                          Text(activityData['rating'].toString()),
+                        ],
+                      )
+                      : null,
             );
           },
         ),
@@ -459,10 +440,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withOpacity(0.7),
-                  ],
+                  colors: [Colors.transparent, Colors.black.withOpacity(0.7)],
                 ),
               ),
             ),
@@ -503,26 +481,22 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                 Text(
                   widget.movie.title,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 if (year.isNotEmpty) ...[
                   Text(
                     '$year • ${hours}h ${minutes}m',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[600],
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 8),
                 ],
                 Row(
                   children: [
-                    Icon(
-                      Icons.star,
-                      color: Colors.amber,
-                      size: 20,
-                    ),
+                    Icon(Icons.star, color: Colors.amber, size: 20),
                     const SizedBox(width: 4),
                     Text(
                       '${(_movieDetails?['vote_average'] ?? 0).toStringAsFixed(1)}/10',
@@ -561,9 +535,9 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
         children: [
           Text(
             'Overview',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           LayoutBuilder(
@@ -597,8 +571,9 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                           _isOverviewExpanded = !_isOverviewExpanded;
                         });
                       },
-                      child:
-                          Text(_isOverviewExpanded ? 'Show less' : 'Read more'),
+                      child: Text(
+                        _isOverviewExpanded ? 'Show less' : 'Read more',
+                      ),
                     ),
                 ],
               );
@@ -625,9 +600,9 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
             children: [
               Text(
                 'Your Rating',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               if (_hasRated)
                 TextButton(
@@ -635,9 +610,8 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => DiaryEntryForm(
-                          movie: widget.movie,
-                        ),
+                        builder:
+                            (context) => DiaryEntryForm(movie: widget.movie),
                       ),
                     );
                   },
@@ -682,22 +656,23 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                 _userRating == 5
                     ? 'Masterpiece!'
                     : _userRating >= 4
-                        ? 'Loved it!'
-                        : _userRating >= 3
-                            ? 'Liked it'
-                            : _userRating >= 2
-                                ? 'It was OK'
-                                : 'Not for me',
+                    ? 'Loved it!'
+                    : _userRating >= 3
+                    ? 'Liked it'
+                    : _userRating >= 2
+                    ? 'It was OK'
+                    : 'Not for me',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
-                  color: _userRating >= 4
-                      ? Colors.green
-                      : _userRating >= 3
+                  color:
+                      _userRating >= 4
+                          ? Colors.green
+                          : _userRating >= 3
                           ? Colors.blue
                           : _userRating >= 2
-                              ? Colors.orange
-                              : Colors.red[700],
+                          ? Colors.orange
+                          : Colors.red[700],
                 ),
               ),
             ),
@@ -717,9 +692,9 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
           padding: const EdgeInsets.all(16),
           child: Text(
             'Cast',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
         ),
         SizedBox(
@@ -731,7 +706,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
             itemBuilder: (context, index) {
               final person = _cast[index];
               final heroTag = 'actor_${person['id']}_${person['profile_path']}';
-              
+
               return GestureDetector(
                 onTap: () {
                   Navigator.push(
@@ -777,10 +752,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                         person['character'],
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 10, color: Colors.grey[600]),
                       ),
                     ],
                   ),
@@ -809,7 +781,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
       itemBuilder: (context, index) {
         final department = crewByDepartment.keys.elementAt(index);
         final crewMembers = crewByDepartment[department]!;
-        
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -817,9 +789,9 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
                 department,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
             ),
             ...crewMembers.map((person) {
@@ -829,14 +801,16 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                   children: [
                     CircleAvatar(
                       radius: 24,
-                      backgroundImage: person['profile_path'] != null
-                          ? NetworkImage(
-                              'https://image.tmdb.org/t/p/w185${person['profile_path']}',
-                            )
-                          : null,
-                      child: person['profile_path'] == null
-                          ? const Icon(Icons.person)
-                          : null,
+                      backgroundImage:
+                          person['profile_path'] != null
+                              ? NetworkImage(
+                                'https://image.tmdb.org/t/p/w185${person['profile_path']}',
+                              )
+                              : null,
+                      child:
+                          person['profile_path'] == null
+                              ? const Icon(Icons.person)
+                              : null,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -845,9 +819,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                         children: [
                           Text(
                             person['name'],
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           Text(
                             person['job'] ?? '',
@@ -872,35 +844,122 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
   Widget _buildTrailersSection() {
     if (_videos.isEmpty) return const SizedBox();
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: _videos.length,
-      itemBuilder: (context, index) {
-        final video = _videos[index];
-        final controller = _videoControllers[index];
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: YoutubePlayer(
-              controller: controller,
-              showVideoProgressIndicator: true,
-              progressIndicatorColor: Colors.red,
-              progressColors: const ProgressBarColors(
-                playedColor: Colors.red,
-                handleColor: Colors.redAccent,
+    return OrientationBuilder(
+      builder: (context, orientation) {
+        if (orientation == Orientation.landscape && _isFullscreen) {
+          // Full screen view in landscape mode
+          return Scaffold(
+            body: Center(
+              child: YoutubePlayer(
+                controller:
+                    _videoControllers[_currentFullscreenVideoIndex ?? 0],
+                showVideoProgressIndicator: true,
+                progressIndicatorColor: Theme.of(context).colorScheme.primary,
+                progressColors: ProgressBarColors(
+                  playedColor: Theme.of(context).colorScheme.primary,
+                  handleColor: Theme.of(context).colorScheme.primaryContainer,
+                ),
+                onReady: () {
+                  print('Video is ready to play in fullscreen');
+                },
+                bottomActions: [
+                  CurrentPosition(),
+                  ProgressBar(
+                    isExpanded: true,
+                    colors: ProgressBarColors(
+                      playedColor: Theme.of(context).colorScheme.primary,
+                      handleColor:
+                          Theme.of(context).colorScheme.primaryContainer,
+                      bufferedColor: Theme.of(
+                        context,
+                      ).colorScheme.primaryContainer.withOpacity(0.4),
+                    ),
+                  ),
+                  RemainingDuration(),
+                  FullScreenButton(
+                    controller:
+                        _videoControllers[_currentFullscreenVideoIndex ?? 0],
+                  ),
+                ],
               ),
-              onReady: () {
-                print('Video ${video['key']} is ready to play');
-              },
-              onEnded: (metaData) {
-                controller.seekTo(const Duration(seconds: 0));
-                controller.pause();
-              },
             ),
-          ),
-        );
+          );
+        } else {
+          // Normal view with list of videos
+          return ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: _videos.length,
+            itemBuilder: (context, index) {
+              final video = _videos[index];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: YoutubePlayerBuilder(
+                    onEnterFullScreen: () {
+                      setState(() {
+                        _isFullscreen = true;
+                        _currentFullscreenVideoIndex = index;
+                      });
+                      SystemChrome.setPreferredOrientations([
+                        DeviceOrientation.landscapeLeft,
+                        DeviceOrientation.landscapeRight,
+                      ]);
+                    },
+                    onExitFullScreen: () {
+                      setState(() {
+                        _isFullscreen = false;
+                        _currentFullscreenVideoIndex = null;
+                      });
+                      SystemChrome.setPreferredOrientations([
+                        DeviceOrientation.portraitUp,
+                        DeviceOrientation.portraitDown,
+                      ]);
+                    },
+                    player: YoutubePlayer(
+                      controller: _videoControllers[index],
+                      showVideoProgressIndicator: true,
+                      progressIndicatorColor:
+                          Theme.of(context).colorScheme.primary,
+                      progressColors: ProgressBarColors(
+                        playedColor: Theme.of(context).colorScheme.primary,
+                        handleColor:
+                            Theme.of(context).colorScheme.primaryContainer,
+                      ),
+                      onReady: () {
+                        print('Video $index is ready to play');
+                      },
+                      bottomActions: [
+                        CurrentPosition(),
+                        ProgressBar(isExpanded: true),
+                        RemainingDuration(),
+                        FullScreenButton(),
+                      ],
+                    ),
+                    builder: (context, player) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          player,
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: Text(
+                              video['name'] ?? 'Video ${index + 1}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
+          );
+        }
       },
     );
   }
@@ -953,19 +1012,12 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                         movie.overview,
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                       ),
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          const Icon(
-                            Icons.star,
-                            color: Colors.amber,
-                            size: 16,
-                          ),
+                          const Icon(Icons.star, color: Colors.amber, size: 16),
                           const SizedBox(width: 4),
                           Text(
                             movie.voteAverage.toStringAsFixed(1),
@@ -987,78 +1039,119 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    return Scaffold(
-      body: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
-          _buildHeader(),
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildMovieInfo(),
-                _buildRatingSection(),
-                _buildOverview(),
-                _buildActivityFeed(),
-                _buildCastSection(),
-                // TabBar
-                Container(
-                  color: Theme.of(context).colorScheme.surface,
-                  child: TabBar(
-                    controller: _tabController,
-                    tabs: const [
-                      Tab(text: 'Crew'),
-                      Tab(text: 'Trailers'),
-                      Tab(text: 'Similar'),
-                    ],
-                    labelColor: Theme.of(context).colorScheme.primary,
-                    unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
-                    indicatorColor: Theme.of(context).colorScheme.primary,
-                    padding: const EdgeInsets.symmetric(horizontal: 0),
-                    labelStyle: const TextStyle(fontSize: 15),
-                    unselectedLabelStyle: const TextStyle(fontSize: 13),
-                  ),
+    return WillPopScope(
+      onWillPop: () async {
+        if (_isFullscreen) {
+          setState(() {
+            _isFullscreen = false;
+            _currentFullscreenVideoIndex = null;
+          });
+          await SystemChrome.setPreferredOrientations([
+            DeviceOrientation.portraitUp,
+            DeviceOrientation.portraitDown,
+          ]);
+          return false; // Don't exit the screen
+        }
+        return true; // Allow exit
+      },
+      child: OrientationBuilder(
+        builder: (context, orientation) {
+          // If in landscape and fullscreen mode, show only the video player
+          if (orientation == Orientation.landscape &&
+              _isFullscreen &&
+              _currentFullscreenVideoIndex != null) {
+            return Scaffold(
+              body: Center(
+                child: YoutubePlayer(
+                  controller: _videoControllers[_currentFullscreenVideoIndex!],
+                  showVideoProgressIndicator: true,
+                  progressIndicatorColor: Theme.of(context).colorScheme.primary,
+                  bottomActions: [
+                    CurrentPosition(),
+                    ProgressBar(isExpanded: true),
+                    RemainingDuration(),
+                    FullScreenButton(
+                      controller:
+                          _videoControllers[_currentFullscreenVideoIndex!],
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 24),
-                // TabBarView
-                SizedBox(
-                  height: 400, // Adjust height as needed
-                  child: TabBarView(
-                    controller: _tabController,
+              ),
+            );
+          }
+
+          // Otherwise show normal UI
+          return Scaffold(
+            body: CustomScrollView(
+              controller: _scrollController,
+              slivers: [
+                _buildHeader(),
+                SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildCrewSection(),
-                      _buildTrailersSection(),
-                      _buildSimilarMovies(),
+                      _buildMovieInfo(),
+                      _buildRatingSection(),
+                      _buildOverview(),
+                      _buildActivityFeed(),
+                      _buildCastSection(),
+                      // TabBar
+                      Container(
+                        color: Theme.of(context).colorScheme.surface,
+                        child: TabBar(
+                          controller: _tabController,
+                          tabs: const [
+                            Tab(text: 'Crew'),
+                            Tab(text: 'Trailers'),
+                            Tab(text: 'Similar'),
+                          ],
+                          labelColor: Theme.of(context).colorScheme.primary,
+                          unselectedLabelColor:
+                              Theme.of(context).colorScheme.onSurfaceVariant,
+                          indicatorColor: Theme.of(context).colorScheme.primary,
+                          padding: const EdgeInsets.symmetric(horizontal: 0),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      // TabBarView
+                      SizedBox(
+                        height: 400, // Adjust height as needed
+                        child: TabBarView(
+                          controller: _tabController,
+                          children: [
+                            _buildCrewSection(),
+                            _buildTrailersSection(),
+                            _buildSimilarMovies(),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
               ],
             ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DiaryEntryForm(
-                movie: widget.movie,
-                existingEntry: _hasRated ? null : null,
-              ),
+            floatingActionButton: FloatingActionButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => DiaryEntryForm(
+                          movie: widget.movie,
+                          existingEntry: _hasRated ? null : null,
+                        ),
+                  ),
+                );
+              },
+              child: const Icon(Icons.edit),
+              tooltip: 'Add to diary',
             ),
           );
         },
-        child: const Icon(Icons.edit),
-        tooltip: 'Add to diary',
       ),
     );
   }

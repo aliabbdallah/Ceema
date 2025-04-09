@@ -51,7 +51,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyC0JISGclEV7O5d_cq6bIxbNX4jayfT3v0',
-    appId: '1:386771880792:android:1eb80938fc903edcfa732d',
+    appId: '1:386771880792:android:60aa950e29003c0ffa732d',
     messagingSenderId: '386771880792',
     projectId: 'ceema-faiz',
     storageBucket: 'ceema-faiz.firebasestorage.app',
@@ -68,7 +68,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyC7lNo8xHtSP_CmIvhvzhHUc0I9IGalAy0',
-    appId: '1:386771880792:ios:967a6cd8895e27a7fa732d',
+    appId: '1:386771880792:ios:406573273af904cefa732d',
     messagingSenderId: '386771880792',
     projectId: 'ceema-faiz',
     storageBucket: 'ceema-faiz.firebasestorage.app',
@@ -76,11 +76,12 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyA4tyiNxuNqPdHboaxfKQC19UyF8MF3eQQ',
-    appId: '1:386771880792:web:c5be050c9124ac67fa732d',
+    apiKey: 'AIzaSyBk30WJocEXF5MKsK23aiYoF6L52M94fLI',
+    appId: '1:386771880792:web:e6693c6dc3e441eafa732d',
     messagingSenderId: '386771880792',
     projectId: 'ceema-faiz',
     authDomain: 'ceema-faiz.firebaseapp.com',
     storageBucket: 'ceema-faiz.firebasestorage.app',
   );
+
 }

@@ -34,13 +34,6 @@ class Comment {
   }
 
   factory Comment.fromJson(Map<String, dynamic> json, String documentId) {
-    DateTime createdAtDate;
-    if (json['createdAt'] is Timestamp) {
-      createdAtDate = (json['createdAt'] as Timestamp).toDate();
-    } else {
-      createdAtDate = DateTime.now();
-    }
-
     return Comment(
       id: documentId,
       postId: json['postId'] ?? '',
@@ -48,7 +41,7 @@ class Comment {
       userName: json['userName'] ?? '',
       userAvatar: json['userAvatar'] ?? '',
       content: json['content'] ?? '',
-      createdAt: createdAtDate,
+      createdAt: (json['createdAt'] as Timestamp).toDate(),
       likes: List<String>.from(json['likes'] ?? []),
     );
   }

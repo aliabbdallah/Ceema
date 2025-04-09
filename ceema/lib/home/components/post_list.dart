@@ -6,12 +6,9 @@ import '../../services/post_service.dart';
 import './post_card.dart';
 
 class PostList extends StatelessWidget {
-  final bool showFriendsOnly;
+  final bool showFollowingOnly;
 
-  const PostList({
-    Key? key,
-    this.showFriendsOnly = false,
-  }) : super(key: key);
+  const PostList({Key? key, this.showFollowingOnly = false}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -23,17 +20,16 @@ class PostList extends StatelessWidget {
       return const SliverToBoxAdapter(
         child: Padding(
           padding: EdgeInsets.all(32.0),
-          child: Center(
-            child: Text('Please sign in to view posts'),
-          ),
+          child: Center(child: Text('Please sign in to view posts')),
         ),
       );
     }
 
     return StreamBuilder<List<Post>>(
-      stream: showFriendsOnly
-          ? postService.getFriendsPosts(currentUser.uid)
-          : postService.getPosts(),
+      stream:
+          showFollowingOnly
+              ? postService.getFollowingPosts(currentUser.uid)
+              : postService.getPosts(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return SliverToBoxAdapter(
@@ -42,11 +38,7 @@ class PostList extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 48,
-                    color: colorScheme.error,
-                  ),
+                  Icon(Icons.error_outline, size: 48, color: colorScheme.error),
                   const SizedBox(height: 16),
                   Text(
                     'Error loading posts',
@@ -75,9 +67,7 @@ class PostList extends StatelessWidget {
           return const SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.all(32.0),
-              child: Center(
-                child: CircularProgressIndicator(),
-              ),
+              child: Center(child: CircularProgressIndicator()),
             ),
           );
         }
@@ -132,8 +122,10 @@ class PostList extends StatelessWidget {
                 duration: Duration(milliseconds: 500 + (index * 100)),
                 curve: Curves.easeInOut,
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   child: PostCard(post: snapshot.data![index]),
                 ),
               );

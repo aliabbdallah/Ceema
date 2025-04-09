@@ -38,32 +38,15 @@ class DiaryService {
       'createdAt': FieldValue.serverTimestamp(),
     });
 
-    // Create a post about the diary entry if rating is provided
-    if (rating > 0) {
-      final user = _auth.currentUser;
-      if (user != null) {
-        String content = review.isNotEmpty
-            ? review
-            : 'I watched ${movie.title} and rated it ${rating % 1 == 0 ? rating.toInt() : rating} stars!';
-
-        await _postService.createPost(
-          userId: user.uid,
-          userName: user.displayName ?? 'User',
-          userAvatar: user.photoURL ?? '',
-          content: content,
-          movie: movie,
-          rating: rating,
-        );
-      }
-    }
-
     // Automatically update user preferences based on this entry
     await _processEntryForPreferences(movie.id, rating);
   }
 
   // Process this entry to update preferences
   Future<void> _processEntryForPreferences(
-      String movieId, double rating) async {
+    String movieId,
+    double rating,
+  ) async {
     try {
       // This is a simpler approach that regenerates all preferences
       // It's more resource-intensive but ensures consistency
@@ -87,10 +70,10 @@ class DiaryService {
         .orderBy('watchedDate', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => DiaryEntry.fromJson(doc.data(), doc.id))
-          .toList();
-    });
+          return snapshot.docs
+              .map((doc) => DiaryEntry.fromJson(doc.data(), doc.id))
+              .toList();
+        });
   }
 
   // Update a diary entry
@@ -129,11 +112,12 @@ class DiaryService {
     // If rating was updated, find and update associated post
     if (rating != null) {
       // Find posts for this movie by this user
-      final postsQuery = await _firestore
-          .collection('posts')
-          .where('userId', isEqualTo: userId)
-          .where('movieId', isEqualTo: movieId)
-          .get();
+      final postsQuery =
+          await _firestore
+              .collection('posts')
+              .where('userId', isEqualTo: userId)
+              .where('movieId', isEqualTo: movieId)
+              .get();
 
       if (postsQuery.docs.isNotEmpty) {
         // Update the most recent post with the new rating
@@ -170,10 +154,11 @@ class DiaryService {
 
   // Get diary statistics
   Future<Map<String, dynamic>> getDiaryStats(String userId) async {
-    final QuerySnapshot entries = await _firestore
-        .collection('diary_entries')
-        .where('userId', isEqualTo: userId)
-        .get();
+    final QuerySnapshot entries =
+        await _firestore
+            .collection('diary_entries')
+            .where('userId', isEqualTo: userId)
+            .get();
 
     int totalMovies = entries.docs.length;
     double totalRating = 0;

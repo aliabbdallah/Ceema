@@ -65,9 +65,9 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error searching movies: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error searching movies: $e')));
         setState(() {
           _isSearching = false;
         });
@@ -92,9 +92,9 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
     }
 
     if (_selectedMovie == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a movie')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select a movie')));
       return;
     }
 
@@ -119,8 +119,8 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
       await _postService.createPost(
         userId: currentUser.uid,
         userName:
-            userData['displayName'] ?? currentUser.displayName ?? 'Anonymous',
-        userAvatar: userData['photoURL'] ?? currentUser.photoURL ?? '',
+            userData['username'] ?? currentUser.displayName ?? 'Anonymous',
+        userAvatar: userData['profileImageUrl'] ?? currentUser.photoURL ?? '',
         content: _contentController.text.trim(),
         movie: _selectedMovie!,
         rating: _rating,
@@ -134,9 +134,9 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating post: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error creating post: $e')));
         setState(() {
           _isLoading = false;
         });
@@ -151,11 +151,11 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
           decoration: InputDecoration(
             hintText: 'Search for a movie...',
             prefixIcon: const Icon(Icons.search),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
             ),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
           onChanged: _searchMovies,
         ),
@@ -184,14 +184,16 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
               itemBuilder: (context, index) {
                 final movie = _searchResults[index];
                 return ListTile(
-                  leading: movie.posterUrl.isNotEmpty
-                      ? Image.network(
-                          movie.posterUrl,
-                          width: 50,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Icon(Icons.movie, size: 50),
-                        )
-                      : const Icon(Icons.movie, size: 50),
+                  leading:
+                      movie.posterUrl.isNotEmpty
+                          ? Image.network(
+                            movie.posterUrl,
+                            width: 50,
+                            errorBuilder:
+                                (context, error, stackTrace) =>
+                                    const Icon(Icons.movie, size: 50),
+                          )
+                          : const Icon(Icons.movie, size: 50),
                   title: Text(movie.title),
                   subtitle: Text(movie.year),
                   onTap: () => _selectMovie(movie),
@@ -220,12 +222,13 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
                   width: 80,
                   height: 120,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    width: 80,
-                    height: 120,
-                    color: Colors.grey[300],
-                    child: const Icon(Icons.movie),
-                  ),
+                  errorBuilder:
+                      (context, error, stackTrace) => Container(
+                        width: 80,
+                        height: 120,
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.movie),
+                      ),
                 ),
               )
             else
@@ -243,15 +246,15 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
                   Text(
                     _selectedMovie!.title,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     _selectedMovie!.year,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -286,22 +289,23 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
         actions: [
           TextButton(
             onPressed: _isLoading ? null : _submitPost,
-            child: _isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+            child:
+                _isLoading
+                    ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                    : const Text(
+                      'Post',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  )
-                : const Text(
-                    'Post',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
           ),
         ],
       ),
@@ -315,10 +319,7 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
             else
               _buildSelectedMovie(),
             const SizedBox(height: 16),
-            Text(
-              'Your Review',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('Your Review', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             TextField(
               controller: _contentController,
@@ -346,10 +347,9 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
                     allowHalfRating: true,
                     itemCount: 5,
                     itemPadding: const EdgeInsets.symmetric(horizontal: 4.0),
-                    itemBuilder: (context, _) => const Icon(
-                      Icons.star,
-                      color: Colors.amber,
-                    ),
+                    itemBuilder:
+                        (context, _) =>
+                            const Icon(Icons.star, color: Colors.amber),
                     onRatingUpdate: (rating) {
                       setState(() {
                         _rating = rating;

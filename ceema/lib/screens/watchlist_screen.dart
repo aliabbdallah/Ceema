@@ -7,7 +7,14 @@ import 'movie_details_screen.dart';
 import 'diary_entry_form.dart';
 
 class WatchlistScreen extends StatefulWidget {
-  const WatchlistScreen({Key? key}) : super(key: key);
+  final String userId;
+  final bool isCurrentUser;
+
+  const WatchlistScreen({
+    Key? key,
+    required this.userId,
+    required this.isCurrentUser,
+  }) : super(key: key);
 
   @override
   _WatchlistScreenState createState() => _WatchlistScreenState();
@@ -65,7 +72,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
 
     try {
       final items = await _watchlistService.getFilteredWatchlist(
-        userId: _auth.currentUser!.uid,
+        userId: widget.userId,
         genre: _selectedGenre,
         year: _selectedYear,
         sortBy: _sortBy,
@@ -232,8 +239,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                   ),
                   const Divider(),
                   SwitchListTile(
-                    title:
-                        Text(tempSortDescending ? 'Descending' : 'Ascending'),
+                    title: Text(
+                      tempSortDescending ? 'Descending' : 'Ascending',
+                    ),
                     value: tempSortDescending,
                     onChanged: (value) {
                       setState(() {
@@ -285,8 +293,8 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) =>
-                          MovieDetailsScreen(movie: item.movie),
+                      builder:
+                          (context) => MovieDetailsScreen(movie: item.movie),
                     ),
                   );
                 },
@@ -304,7 +312,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                   ).then((_) {
                     // Remove from watchlist after adding to diary
                     _watchlistService.removeFromWatchlist(
-                        item.id, _auth.currentUser!.uid);
+                      item.id,
+                      widget.userId,
+                    );
                     _loadWatchlist();
                   });
                 },
@@ -316,7 +326,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                   Navigator.pop(context);
                   await _watchlistService.removeFromWatchlist(
                     item.id,
-                    _auth.currentUser!.uid,
+                    widget.userId,
                   );
                   _loadWatchlist();
 
@@ -381,20 +391,14 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     const SizedBox(height: 4),
                     Text(
                       item.movie.year,
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       item.movie.overview,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.grey[800],
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: Colors.grey[800], fontSize: 14),
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -415,13 +419,16 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) =>
-                                        DiaryEntryForm(movie: item.movie),
+                                    builder:
+                                        (context) =>
+                                            DiaryEntryForm(movie: item.movie),
                                   ),
                                 ).then((_) {
                                   // Remove from watchlist after adding to diary
                                   _watchlistService.removeFromWatchlist(
-                                      item.id, _auth.currentUser!.uid);
+                                    item.id,
+                                    widget.userId,
+                                  );
                                   _loadWatchlist();
                                 });
                               },
@@ -432,7 +439,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                               onPressed: () async {
                                 await _watchlistService.removeFromWatchlist(
                                   item.id,
-                                  _auth.currentUser!.uid,
+                                  widget.userId,
                                 );
                                 _loadWatchlist();
                               },
@@ -489,43 +496,38 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _watchlistItems.isEmpty
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _watchlistItems.isEmpty
               ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.bookmark_border,
-                        size: 64,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Your watchlist is empty',
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Add movies you want to watch later',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[500],
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: _watchlistItems.length,
-                  itemBuilder: (context, index) {
-                    return _buildWatchlistItem(_watchlistItems[index]);
-                  },
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.bookmark_border,
+                      size: 64,
+                      color: Colors.grey[400],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Your watchlist is empty',
+                      style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Add movies you want to watch later',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                    ),
+                  ],
                 ),
+              )
+              : ListView.builder(
+                itemCount: _watchlistItems.length,
+                itemBuilder: (context, index) {
+                  return _buildWatchlistItem(_watchlistItems[index]);
+                },
+              ),
     );
   }
 }

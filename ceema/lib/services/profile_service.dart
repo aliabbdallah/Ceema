@@ -92,34 +92,35 @@ class ProfileService {
 
   // Get user profile with friend stats
   Stream<UserModel> getUserProfileStream(String userId) {
-    return _firestore
-        .collection('users')
-        .doc(userId)
-        .snapshots()
-        .asyncMap((doc) async {
+    return _firestore.collection('users').doc(userId).snapshots().asyncMap((
+      doc,
+    ) async {
       if (!doc.exists) {
         throw Exception('User not found');
       }
 
       // Get friend stats
-      final followersCount = await _firestore
-          .collection('friends')
-          .where('friendId', isEqualTo: userId)
-          .count()
-          .get();
+      final followersCount =
+          await _firestore
+              .collection('follows')
+              .where('followedId', isEqualTo: userId)
+              .count()
+              .get();
 
-      final followingCount = await _firestore
-          .collection('friends')
-          .where('userId', isEqualTo: userId)
-          .count()
-          .get();
+      final followingCount =
+          await _firestore
+              .collection('follows')
+              .where('followerId', isEqualTo: userId)
+              .count()
+              .get();
 
-      final mutualCount = await _firestore
-          .collection('friends')
-          .where('userId', isEqualTo: userId)
-          .where('isMutual', isEqualTo: true)
-          .count()
-          .get();
+      final mutualCount =
+          await _firestore
+              .collection('follows')
+              .where('followerId', isEqualTo: userId)
+              .where('isMutual', isEqualTo: true)
+              .count()
+              .get();
 
       // Create updated user data with friend stats
       final userData = doc.data()!;
@@ -133,24 +134,27 @@ class ProfileService {
 
   // Update user stats after friend actions
   Future<void> updateUserFriendStats(String userId) async {
-    final followersCount = await _firestore
-        .collection('friends')
-        .where('friendId', isEqualTo: userId)
-        .count()
-        .get();
+    final followersCount =
+        await _firestore
+            .collection('follows')
+            .where('followedId', isEqualTo: userId)
+            .count()
+            .get();
 
-    final followingCount = await _firestore
-        .collection('friends')
-        .where('userId', isEqualTo: userId)
-        .count()
-        .get();
+    final followingCount =
+        await _firestore
+            .collection('follows')
+            .where('followerId', isEqualTo: userId)
+            .count()
+            .get();
 
-    final mutualCount = await _firestore
-        .collection('friends')
-        .where('userId', isEqualTo: userId)
-        .where('isMutual', isEqualTo: true)
-        .count()
-        .get();
+    final mutualCount =
+        await _firestore
+            .collection('follows')
+            .where('followerId', isEqualTo: userId)
+            .where('isMutual', isEqualTo: true)
+            .count()
+            .get();
 
     await _firestore.collection('users').doc(userId).update({
       'followersCount': followersCount.count,

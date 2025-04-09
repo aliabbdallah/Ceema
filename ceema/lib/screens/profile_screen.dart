@@ -3,100 +3,158 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/post_service.dart';
 import '../services/profile_service.dart';
+import '../services/diary_service.dart';
 import '../models/post.dart';
 import '../models/user.dart';
+import '../models/diary_entry.dart';
+import '../models/movie.dart';
 import 'profile_edit_screen.dart';
 import '../screens/friends_screen.dart';
 import 'settings_screen.dart';
 import '../screens/watchlist_screen.dart';
 import '../screens/friend_request_screen.dart';
 import '../widgets/profile_image_widget.dart';
+import '../services/follow_service.dart';
+import '../widgets/follow_button.dart';
+import 'followers_screen.dart';
+import 'following_screen.dart';
+import 'follow_requests_screen.dart';
+import '../home/components/post_card.dart';
+import 'diary_entry_details.dart';
+import 'package:intl/intl.dart';
+import 'podium_edit_screen.dart';
+import '../widgets/podium_widget.dart';
+import '../screens/movie_details_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({Key? key}) : super(key: key);
+  final String userId;
+  final bool isCurrentUser;
+
+  const ProfileScreen({
+    Key? key,
+    required this.userId,
+    this.isCurrentUser = false,
+  }) : super(key: key);
 
   @override
   _ProfileScreenState createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen>
+    with SingleTickerProviderStateMixin {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final PostService _postService = PostService();
   final ProfileService _profileService = ProfileService();
+  final DiaryService _diaryService = DiaryService();
+  late TabController _tabController;
+  String _selectedTab = 'posts';
 
-  Widget _buildProfileStats(UserModel user) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                InkWell(
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => FriendsScreen(
-                        userId: _auth.currentUser!.uid,
-                        initialTabIndex: 0,
-                      ),
-                    ),
-                  ),
-                  child: _buildStatItem('Following', user.followingCount),
-                ),
-                InkWell(
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => FriendsScreen(
-                        userId: _auth.currentUser!.uid,
-                        initialTabIndex: 1,
-                      ),
-                    ),
-                  ),
-                  child: _buildStatItem('Followers', user.followersCount),
-                ),
-                InkWell(
-                  onTap: () {
-                    // Navigate to the watchlist screen directly
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const WatchlistScreen(),
-                      ),
-                    );
-                  },
-                  child: _buildStatItem('Watchlist', user.watchlistCount),
-                ),
-                _buildStatItem(
-                    'Movies', 0), // Replace with actual movie count later
-              ],
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildDiaryEntry(DiaryEntry entry) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DiaryEntryDetails(entry: entry),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: Theme.of(context).dividerColor.withOpacity(0.1),
+              width: 1,
             ),
-            const SizedBox(height: 16),
-            InkWell(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const FriendRequestsScreen(),
-                ),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                entry.moviePosterUrl,
+                width: 60,
+                height: 90,
+                fit: BoxFit.cover,
               ),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.person_add),
-                    SizedBox(width: 8),
-                    Text('Friend Requests'),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          entry.movieTitle,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    DateFormat('MMMM d, yyyy').format(entry.watchedDate),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      ...List.generate(5, (index) {
+                        return Icon(
+                          index < entry.rating ? Icons.star : Icons.star_border,
+                          color: Colors.amber,
+                          size: 16,
+                        );
+                      }),
+                      const SizedBox(width: 8),
+                      Text(
+                        entry.rating.toString(),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (entry.isFavorite)
+                        const Icon(Icons.favorite, color: Colors.red, size: 16),
+                      if (entry.isRewatch) ...[
+                        if (entry.isFavorite) const SizedBox(width: 8),
+                        const Icon(Icons.replay, size: 16),
+                      ],
+                    ],
+                  ),
+                  if (entry.review.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      entry.review,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ],
-                ),
+                ],
               ),
             ),
           ],
@@ -105,28 +163,162 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildStatItem(String label, int count) {
+  Widget _buildDiaryList() {
+    return StreamBuilder<List<DiaryEntry>>(
+      stream: _diaryService.getDiaryEntries(widget.userId),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final entries = snapshot.data!;
+
+        if (entries.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.movie_outlined, size: 64, color: Colors.grey[400]),
+                const SizedBox(height: 16),
+                const Text('No diary entries yet'),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: entries.length,
+          itemBuilder: (context, index) {
+            final entry = entries[index];
+            final isNewMonth =
+                index == 0 ||
+                DateFormat(
+                      'MMMM yyyy',
+                    ).format(entries[index - 1].watchedDate) !=
+                    DateFormat('MMMM yyyy').format(entry.watchedDate);
+
+            return Column(
+              children: [
+                if (isNewMonth)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    color: Theme.of(context).colorScheme.surface,
+                    child: Text(
+                      DateFormat(
+                        'MMMM yyyy',
+                      ).format(entry.watchedDate).toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                _buildDiaryEntry(entry),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildProfileStats(UserModel user) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildStatColumn('Following', user.followingCount),
+                _buildStatColumn('Followers', user.followersCount),
+                _buildStatColumn('Watchlist', user.watchlistCount),
+              ],
+            ),
+            if (user.podiumMovies.isNotEmpty) ...[
+              const Divider(),
+              const SizedBox(height: 16),
+              PodiumWidget(
+                movies: user.podiumMovies,
+                isEditable: widget.isCurrentUser,
+                onMovieTap: (movie) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (context) => MovieDetailsScreen(
+                            movie: Movie(
+                              id: movie.tmdbId,
+                              title: movie.title,
+                              posterUrl: movie.posterUrl,
+                              year: '', // We'll get this from the API
+                              overview: '', // We'll get this from the API
+                            ),
+                          ),
+                    ),
+                  );
+                },
+                onRankTap:
+                    widget.isCurrentUser
+                        ? (rank) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const PodiumEditScreen(),
+                            ),
+                          );
+                        }
+                        : null,
+              ),
+            ] else if (widget.isCurrentUser) ...[
+              const Divider(),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text('Create Your Podium'),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const PodiumEditScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatColumn(String label, int count) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           count.toString(),
-          style: Theme.of(context).textTheme.titleMedium,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.grey,
-            fontFamily: Theme.of(context).textTheme.bodySmall?.fontFamily,
-            fontWeight: FontWeight.w300,
-          ),
-        ),
+        const SizedBox(height: 4),
+        Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
       ],
     );
   }
 
   Widget _buildPostList() {
     return StreamBuilder<List<Post>>(
-      stream: _postService.getUserPosts(_auth.currentUser!.uid),
+      stream: _postService.getUserPosts(widget.userId),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(child: Text('Error: ${snapshot.error}'));
@@ -143,11 +335,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.movie_outlined,
-                  size: 64,
-                  color: Colors.grey[400],
-                ),
+                Icon(Icons.movie_outlined, size: 64, color: Colors.grey[400]),
                 const SizedBox(height: 16),
                 const Text('No posts yet'),
               ],
@@ -155,106 +343,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           );
         }
 
-        return Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          child: ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: posts.length,
-            itemBuilder: (context, index) {
-              final post = posts[index];
-              return Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: Image.network(
-                                post.moviePosterUrl,
-                                width: 40,
-                                height: 60,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    post.movieTitle,
-                                    style: Theme.of(context).textTheme.titleSmall,
-                                  ),
-                                  Text(
-                                    post.movieYear,
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        if (post.rating > 0) ...[
-                          Row(
-                            children: List.generate(5, (index) {
-                              return Icon(
-                                index < post.rating
-                                    ? Icons.star
-                                    : Icons.star_border,
-                                color: Colors.amber,
-                                size: 16,
-                              );
-                            }),
-                          ),
-                          const SizedBox(height: 8),
-                        ],
-                        Text(post.content),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.favorite,
-                              size: 16,
-                              color: post.likes.contains(_auth.currentUser?.uid)
-                                  ? Colors.red
-                                  : Colors.grey,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(post.likes.length.toString()),
-                            const SizedBox(width: 16),
-                            const Icon(
-                              Icons.comment_outlined,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(post.commentCount.toString()),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (index < posts.length - 1)
-                    Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: Colors.grey.withOpacity(0.1),
-                    ),
-                ],
-              );
-            },
-          ),
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: posts.length,
+          itemBuilder: (context, index) {
+            return SeamlessPostCard(post: posts[index]);
+          },
         );
       },
     );
@@ -263,8 +358,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profile'),
+        actions: [
+          if (widget.isCurrentUser)
+            IconButton(
+              icon: const Icon(Icons.person_add),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const FollowRequestsScreen(),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
       body: StreamBuilder<UserModel>(
-        stream: _profileService.getUserProfileStream(_auth.currentUser!.uid),
+        stream: _profileService.getUserProfileStream(widget.userId),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(child: Text('Error: ${snapshot.error}'));
@@ -285,9 +397,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 flexibleSpace: FlexibleSpaceBar(
                   title: Text(
                     user.username,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: Colors.white,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(color: Colors.white),
                   ),
                   background: Container(
                     decoration: BoxDecoration(
@@ -296,10 +408,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         end: Alignment.bottomCenter,
                         colors: [
                           Theme.of(context).colorScheme.primary,
-                          Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withOpacity(0.7),
+                          Theme.of(
+                            context,
+                          ).colorScheme.primary.withOpacity(0.7),
                         ],
                       ),
                     ),
@@ -308,21 +419,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 actions: [
                   IconButton(
                     icon: const Icon(Icons.edit),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ProfileEditScreen(),
-                      ),
-                    ),
+                    onPressed:
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ProfileEditScreen(),
+                          ),
+                        ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.settings),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SettingsScreen(),
-                      ),
-                    ),
+                    onPressed:
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SettingsScreen(),
+                          ),
+                        ),
                   ),
                 ],
               ),
@@ -350,26 +463,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                     _buildProfileStats(user),
                     const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Row(
-                        children: [
-                          Text(
-                            'My Posts',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const Spacer(),
-                          Text(
-                            'Movie Reviews',
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
+                    TabBar(
+                      controller: _tabController,
+                      onTap: (index) {
+                        setState(() {
+                          _selectedTab = index == 0 ? 'posts' : 'diary';
+                        });
+                      },
+                      tabs: const [Tab(text: 'Posts'), Tab(text: 'Diary')],
                     ),
-                    const SizedBox(height: 8),
-                    _buildPostList(),
+                    const SizedBox(height: 16),
+                    _selectedTab == 'posts'
+                        ? _buildPostList()
+                        : _buildDiaryList(),
                   ],
                 ),
               ),

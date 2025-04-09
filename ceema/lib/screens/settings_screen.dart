@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 import '../screens/profile_edit_screen.dart';
 import '../screens/sign_in_screen.dart';
@@ -36,10 +37,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadUserSettings() async {
     try {
-      final userDoc = await _firestore
-          .collection('users')
-          .doc(_auth.currentUser!.uid)
-          .get();
+      final userDoc =
+          await _firestore
+              .collection('users')
+              .doc(_auth.currentUser!.uid)
+              .get();
 
       if (userDoc.exists) {
         setState(() {
@@ -55,10 +57,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _updateSetting(String field, dynamic value) async {
     try {
-      await _firestore
-          .collection('users')
-          .doc(_auth.currentUser!.uid)
-          .update({field: value});
+      await _firestore.collection('users').doc(_auth.currentUser!.uid).update({
+        field: value,
+      });
 
       _showSuccessSnackBar('Settings updated');
     } catch (e) {
@@ -68,19 +69,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _showSuccessSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.green),
     );
   }
 
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
@@ -107,8 +102,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Account deletion method
   Future<void> _deleteAccount() async {
     try {
+      final userId = _auth.currentUser!.uid;
+
       // Delete user data from Firestore
-      await _firestore.collection('users').doc(_auth.currentUser!.uid).delete();
+      await _firestore.collection('users').doc(userId).delete();
+
+      // Delete user's notifications
+      final notifications =
+          await _firestore
+              .collection('notifications')
+              .where('userId', isEqualTo: userId)
+              .get();
+      for (var doc in notifications.docs) {
+        await doc.reference.delete();
+      }
+
+      // Delete user's search history
+      final searchHistory =
+          await _firestore
+              .collection('userSearches')
+              .doc(userId)
+              .collection('recent')
+              .get();
+      for (var doc in searchHistory.docs) {
+        await doc.reference.delete();
+      }
+
+      // Delete user's preferences
+      await _firestore.collection('user_preferences').doc(userId).delete();
+
+      // Delete user's profile image from Storage if it exists
+      try {
+        final userDoc = await _firestore.collection('users').doc(userId).get();
+        final profileImageUrl = userDoc.data()?['profileImageUrl'];
+        if (profileImageUrl != null && profileImageUrl.startsWith('http')) {
+          final ref = FirebaseStorage.instance.refFromURL(profileImageUrl);
+          await ref.delete();
+        }
+      } catch (e) {
+        print('Error deleting profile image: $e');
+      }
 
       // Delete user authentication
       await _auth.currentUser!.delete();
@@ -139,9 +172,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Text(
               title,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary,
+              ),
             ),
           ),
           ...children,
@@ -170,9 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-      ),
+      appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
           // Account & Profile Section
@@ -185,20 +216,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'Edit Profile',
                 subtitle: 'Update your personal information',
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ProfileEditScreen(),
-                  ),
-                ),
+                onTap:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ProfileEditScreen(),
+                      ),
+                    ),
               ),
 
               // Email Verification Status
               StreamBuilder<DocumentSnapshot>(
-                stream: _firestore
-                    .collection('users')
-                    .doc(_auth.currentUser!.uid)
-                    .snapshots(),
+                stream:
+                    _firestore
+                        .collection('users')
+                        .doc(_auth.currentUser!.uid)
+                        .snapshots(),
                 builder: (context, snapshot) {
                   bool isVerified = false;
 
@@ -210,9 +243,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     icon: Icons.email,
                     title: 'Email',
                     subtitle: _auth.currentUser?.email ?? 'No email',
-                    trailing: isVerified
-                        ? const Icon(Icons.verified, color: Colors.green)
-                        : const Icon(Icons.warning, color: Colors.orange),
+                    trailing:
+                        isVerified
+                            ? const Icon(Icons.verified, color: Colors.green)
+                            : const Icon(Icons.warning, color: Colors.orange),
                   );
                 },
               ),
@@ -321,28 +355,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showDeleteConfirmationDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Account'),
-        content: const Text(
-          'Are you sure you want to delete your account? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _deleteAccount();
-            },
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.red),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete Account'),
+            content: const Text(
+              'Are you sure you want to delete your account? This action cannot be undone.',
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _deleteAccount();
+                },
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }

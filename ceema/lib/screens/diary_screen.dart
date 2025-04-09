@@ -9,6 +9,8 @@ import '../widgets/movie_selection_dialog.dart';
 import '../widgets/loading_indicator.dart';
 import 'diary_entry_form.dart';
 import 'diary_entry_details.dart';
+import 'edit_diary_entry_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class DiaryScreen extends StatefulWidget {
   const DiaryScreen({Key? key}) : super(key: key);
@@ -43,47 +45,48 @@ class _DiaryScreenState extends State<DiaryScreen> {
   void _showSortOptions() {
     showModalBottomSheet(
       context: context,
-      builder: (context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            title: const Text('Date (Newest First)'),
-            leading: const Icon(Icons.calendar_today),
-            selected: _selectedSort == 'date_desc',
-            onTap: () {
-              setState(() => _selectedSort = 'date_desc');
-              Navigator.pop(context);
-            },
+      builder:
+          (context) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('Date (Newest First)'),
+                leading: const Icon(Icons.calendar_today),
+                selected: _selectedSort == 'date_desc',
+                onTap: () {
+                  setState(() => _selectedSort = 'date_desc');
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                title: const Text('Date (Oldest First)'),
+                leading: const Icon(Icons.calendar_today_outlined),
+                selected: _selectedSort == 'date_asc',
+                onTap: () {
+                  setState(() => _selectedSort = 'date_asc');
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                title: const Text('Rating (High to Low)'),
+                leading: const Icon(Icons.star),
+                selected: _selectedSort == 'rating_desc',
+                onTap: () {
+                  setState(() => _selectedSort = 'rating_desc');
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                title: const Text('Rating (Low to High)'),
+                leading: const Icon(Icons.star_border),
+                selected: _selectedSort == 'rating_asc',
+                onTap: () {
+                  setState(() => _selectedSort = 'rating_asc');
+                  Navigator.pop(context);
+                },
+              ),
+            ],
           ),
-          ListTile(
-            title: const Text('Date (Oldest First)'),
-            leading: const Icon(Icons.calendar_today_outlined),
-            selected: _selectedSort == 'date_asc',
-            onTap: () {
-              setState(() => _selectedSort = 'date_asc');
-              Navigator.pop(context);
-            },
-          ),
-          ListTile(
-            title: const Text('Rating (High to Low)'),
-            leading: const Icon(Icons.star),
-            selected: _selectedSort == 'rating_desc',
-            onTap: () {
-              setState(() => _selectedSort = 'rating_desc');
-              Navigator.pop(context);
-            },
-          ),
-          ListTile(
-            title: const Text('Rating (Low to High)'),
-            leading: const Icon(Icons.star_border),
-            selected: _selectedSort == 'rating_asc',
-            onTap: () {
-              setState(() => _selectedSort = 'rating_asc');
-              Navigator.pop(context);
-            },
-          ),
-        ],
-      ),
     );
   }
 
@@ -97,14 +100,12 @@ class _DiaryScreenState extends State<DiaryScreen> {
           ListTile(
             title: const Text(
               'Your Movie Stats',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             trailing: IconButton(
               icon: Icon(
-                  _isStatsExpanded ? Icons.expand_less : Icons.expand_more),
+                _isStatsExpanded ? Icons.expand_less : Icons.expand_more,
+              ),
               onPressed: () {
                 setState(() {
                   _isStatsExpanded = !_isStatsExpanded;
@@ -150,25 +151,15 @@ class _DiaryScreenState extends State<DiaryScreen> {
   Widget _buildStatItem(String label, String value, IconData icon) {
     return Column(
       children: [
-        Icon(
-          icon,
-          color: Theme.of(context).colorScheme.primary,
-          size: 24,
-        ),
+        Icon(icon, color: Theme.of(context).colorScheme.primary, size: 24),
         const SizedBox(height: 8),
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
         Text(
           label,
-          style: TextStyle(
-            color: Colors.grey[600],
-            fontSize: 12,
-          ),
+          style: TextStyle(color: Colors.grey[600], fontSize: 12),
           textAlign: TextAlign.center,
         ),
       ],
@@ -193,9 +184,10 @@ class _DiaryScreenState extends State<DiaryScreen> {
                       setState(() => _selectedFilter = 'all');
                     },
                     labelStyle: TextStyle(
-                      color: _selectedFilter == 'all'
-                          ? Theme.of(context).colorScheme.onPrimary
-                          : Theme.of(context).colorScheme.onSurface,
+                      color:
+                          _selectedFilter == 'all'
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : Theme.of(context).colorScheme.onSurface,
                     ),
                     selectedColor: Theme.of(context).colorScheme.primary,
                     backgroundColor: Theme.of(context).colorScheme.surface,
@@ -208,9 +200,10 @@ class _DiaryScreenState extends State<DiaryScreen> {
                       setState(() => _selectedFilter = 'favorites');
                     },
                     labelStyle: TextStyle(
-                      color: _selectedFilter == 'favorites'
-                          ? Theme.of(context).colorScheme.onPrimary
-                          : Theme.of(context).colorScheme.onSurface,
+                      color:
+                          _selectedFilter == 'favorites'
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : Theme.of(context).colorScheme.onSurface,
                     ),
                     selectedColor: Theme.of(context).colorScheme.primary,
                     backgroundColor: Theme.of(context).colorScheme.surface,
@@ -223,9 +216,10 @@ class _DiaryScreenState extends State<DiaryScreen> {
                       setState(() => _selectedFilter = 'rewatches');
                     },
                     labelStyle: TextStyle(
-                      color: _selectedFilter == 'rewatches'
-                          ? Theme.of(context).colorScheme.onPrimary
-                          : Theme.of(context).colorScheme.onSurface,
+                      color:
+                          _selectedFilter == 'rewatches'
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : Theme.of(context).colorScheme.onSurface,
                     ),
                     selectedColor: Theme.of(context).colorScheme.primary,
                     backgroundColor: Theme.of(context).colorScheme.surface,
@@ -241,16 +235,17 @@ class _DiaryScreenState extends State<DiaryScreen> {
 
   List<DiaryEntry> _sortAndFilterEntries(List<DiaryEntry> entries) {
     // Apply filters
-    var filteredEntries = entries.where((entry) {
-      switch (_selectedFilter) {
-        case 'favorites':
-          return entry.isFavorite;
-        case 'rewatches':
-          return entry.isRewatch;
-        default:
-          return true;
-      }
-    }).toList();
+    var filteredEntries =
+        entries.where((entry) {
+          switch (_selectedFilter) {
+            case 'favorites':
+              return entry.isFavorite;
+            case 'rewatches':
+              return entry.isRewatch;
+            default:
+              return true;
+          }
+        }).toList();
 
     // Apply sorting
     filteredEntries.sort((a, b) {
@@ -282,8 +277,8 @@ class _DiaryScreenState extends State<DiaryScreen> {
           isHalfStar
               ? Icons.star_half
               : isFullStar
-                  ? Icons.star
-                  : Icons.star_border,
+              ? Icons.star
+              : Icons.star_border,
           color: Colors.amber,
           size: 16,
         );
@@ -315,10 +310,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Day number
-            Container(
-              width: 40,
-              alignment: Alignment.topCenter,
-            ),
+            Container(width: 40, alignment: Alignment.topCenter),
             const SizedBox(width: 12),
             // Movie poster
             ClipRRect(
@@ -351,30 +343,100 @@ class _DiaryScreenState extends State<DiaryScreen> {
                       ),
                       PopupMenuButton<String>(
                         icon: const Icon(Icons.more_vert),
-                        itemBuilder: (context) => [
-                          PopupMenuItem(
-                            value: 'edit',
-                            child: Row(
-                              children: const [
-                                Icon(Icons.edit, size: 20),
-                                SizedBox(width: 8),
-                                Text('Edit Entry'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: const [
-                                Icon(Icons.delete, size: 20),
-                                SizedBox(width: 8),
-                                Text('Delete Entry'),
-                              ],
-                            ),
-                          ),
-                        ],
-                        onSelected: (value) {
-                          // TODO: Implement edit and delete actions
+                        itemBuilder:
+                            (context) => [
+                              PopupMenuItem(
+                                value: 'edit',
+                                child: Row(
+                                  children: const [
+                                    Icon(Icons.edit, size: 20),
+                                    SizedBox(width: 8),
+                                    Text('Edit '),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: const [
+                                    Icon(Icons.delete, size: 20),
+                                    SizedBox(width: 8),
+                                    Text('Delete '),
+                                  ],
+                                ),
+                              ),
+                            ],
+                        onSelected: (value) async {
+                          if (value == 'edit') {
+                            // Navigate to edit screen
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) =>
+                                        EditDiaryEntryScreen(entry: entry),
+                              ),
+                            );
+
+                            if (result == true) {
+                              // Refresh the diary entries if edit was successful
+                              _loadStats();
+                            }
+                          } else if (value == 'delete') {
+                            // Show confirmation dialog
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder:
+                                  (context) => AlertDialog(
+                                    title: const Text('Delete Entry'),
+                                    content: const Text(
+                                      'Are you sure you want to delete this diary entry?',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed:
+                                            () => Navigator.pop(context, false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed:
+                                            () => Navigator.pop(context, true),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ],
+                                  ),
+                            );
+
+                            if (confirmed == true) {
+                              try {
+                                await FirebaseFirestore.instance
+                                    .collection('diary_entries')
+                                    .doc(entry.id)
+                                    .delete();
+
+                                // Refresh the diary entries
+                                _loadStats();
+
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Entry deleted successfully',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error deleting entry: $e'),
+                                    ),
+                                  );
+                                }
+                              }
+                            }
+                          }
                         },
                       ),
                     ],
@@ -382,10 +444,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
                   const SizedBox(height: 4),
                   Text(
                     DateFormat('MMMM d, yyyy').format(entry.watchedDate),
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -429,21 +488,20 @@ class _DiaryScreenState extends State<DiaryScreen> {
   void _handleMovieSelection() {
     showDialog(
       context: context,
-      builder: (BuildContext context) => MovieSelectionDialog(
-        onMovieSelected: (Movie selectedMovie) {
-          Navigator.pop(context);
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DiaryEntryForm(
-                movie: selectedMovie,
-              ),
-            ),
-          ).then((_) {
-            _loadStats();
-          });
-        },
-      ),
+      builder:
+          (BuildContext context) => MovieSelectionDialog(
+            onMovieSelected: (Movie selectedMovie) {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => DiaryEntryForm(movie: selectedMovie),
+                ),
+              ).then((_) {
+                _loadStats();
+              });
+            },
+          ),
     );
   }
 
@@ -455,56 +513,57 @@ class _DiaryScreenState extends State<DiaryScreen> {
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.analytics),
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'date_desc',
-                child: Row(
-                  children: [
-                    const Icon(Icons.calendar_today),
-                    const SizedBox(width: 8),
-                    const Text('Date (Newest First)'),
-                    if (_selectedSort == 'date_desc')
-                      const Icon(Icons.check, size: 20),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'date_asc',
-                child: Row(
-                  children: [
-                    const Icon(Icons.calendar_today_outlined),
-                    const SizedBox(width: 8),
-                    const Text('Date (Oldest First)'),
-                    if (_selectedSort == 'date_asc')
-                      const Icon(Icons.check, size: 20),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'rating_desc',
-                child: Row(
-                  children: [
-                    const Icon(Icons.star),
-                    const SizedBox(width: 8),
-                    const Text('Rating (High to Low)'),
-                    if (_selectedSort == 'rating_desc')
-                      const Icon(Icons.check, size: 20),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'rating_asc',
-                child: Row(
-                  children: [
-                    const Icon(Icons.star_border),
-                    const SizedBox(width: 8),
-                    const Text('Rating (Low to High)'),
-                    if (_selectedSort == 'rating_asc')
-                      const Icon(Icons.check, size: 20),
-                  ],
-                ),
-              ),
-            ],
+            itemBuilder:
+                (context) => [
+                  PopupMenuItem(
+                    value: 'date_desc',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today),
+                        const SizedBox(width: 8),
+                        const Text('Date (Newest First)'),
+                        if (_selectedSort == 'date_desc')
+                          const Icon(Icons.check, size: 20),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'date_asc',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today_outlined),
+                        const SizedBox(width: 8),
+                        const Text('Date (Oldest First)'),
+                        if (_selectedSort == 'date_asc')
+                          const Icon(Icons.check, size: 20),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'rating_desc',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.star),
+                        const SizedBox(width: 8),
+                        const Text('Rating (High to Low)'),
+                        if (_selectedSort == 'rating_desc')
+                          const Icon(Icons.check, size: 20),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'rating_asc',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.star_border),
+                        const SizedBox(width: 8),
+                        const Text('Rating (Low to High)'),
+                        if (_selectedSort == 'rating_asc')
+                          const Icon(Icons.check, size: 20),
+                      ],
+                    ),
+                  ),
+                ],
             onSelected: (value) {
               setState(() => _selectedSort = value);
             },
@@ -515,9 +574,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
         stream: _diaryService.getDiaryEntries(_auth.currentUser!.uid),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(
-              child: Text('Error: ${snapshot.error}'),
-            );
+            return Center(child: Text('Error: ${snapshot.error}'));
           }
 
           if (!snapshot.hasData) {
@@ -531,61 +588,68 @@ class _DiaryScreenState extends State<DiaryScreen> {
               _buildStats(),
               _buildFilterBar(),
               Expanded(
-                child: entries.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.movie_outlined,
-                              size: 64,
-                              color: Colors.grey[400],
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No entries found',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: entries.length,
-                        itemBuilder: (context, index) {
-                          final entry = entries[index];
-                          final isNewMonth = index == 0 ||
-                              DateFormat('MMMM yyyy')
-                                      .format(entries[index - 1].watchedDate) !=
-                                  DateFormat('MMMM yyyy')
-                                      .format(entry.watchedDate);
-
-                          return Column(
+                child:
+                    entries.isEmpty
+                        ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              if (isNewMonth)
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(16),
-                                  color: Theme.of(context).colorScheme.surface,
-                                  child: Text(
-                                    DateFormat('MMMM yyyy')
-                                        .format(entry.watchedDate)
-                                        .toUpperCase(),
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color:
-                                          Theme.of(context).colorScheme.primary,
+                              Icon(
+                                Icons.movie_outlined,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No entries found',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                        : ListView.builder(
+                          itemCount: entries.length,
+                          itemBuilder: (context, index) {
+                            final entry = entries[index];
+                            final isNewMonth =
+                                index == 0 ||
+                                DateFormat(
+                                      'MMMM yyyy',
+                                    ).format(entries[index - 1].watchedDate) !=
+                                    DateFormat(
+                                      'MMMM yyyy',
+                                    ).format(entry.watchedDate);
+
+                            return Column(
+                              children: [
+                                if (isNewMonth)
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(16),
+                                    color:
+                                        Theme.of(context).colorScheme.surface,
+                                    child: Text(
+                                      DateFormat(
+                                        'MMMM yyyy',
+                                      ).format(entry.watchedDate).toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color:
+                                            Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              _buildDiaryEntry(entry),
-                            ],
-                          );
-                        },
-                      ),
+                                _buildDiaryEntry(entry),
+                              ],
+                            );
+                          },
+                        ),
               ),
             ],
           );

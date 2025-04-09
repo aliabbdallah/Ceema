@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/movie.dart';
 import '../../services/tmdb_service.dart';
 import '../../screens/movie_details_screen.dart';
+import '../../screens/trending_movies_screen.dart';
 
 class TrendingMoviesSection extends StatefulWidget {
   const TrendingMoviesSection({Key? key}) : super(key: key);
@@ -70,10 +71,7 @@ class _TrendingMoviesSectionState extends State<TrendingMoviesSection>
           onTap: () => _navigateToMovieDetails(movie),
           child: Container(
             width: 120,
-            margin: EdgeInsets.only(
-              right: 12,
-              left: index == 0 ? 0 : 0,
-            ),
+            margin: EdgeInsets.only(right: 12, left: index == 0 ? 0 : 0),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Image.network(
@@ -89,10 +87,11 @@ class _TrendingMoviesSectionState extends State<TrendingMoviesSection>
                     color: Theme.of(context).colorScheme.surfaceVariant,
                     child: Center(
                       child: CircularProgressIndicator(
-                        value: loadingProgress.expectedTotalBytes != null
-                            ? loadingProgress.cumulativeBytesLoaded /
-                                loadingProgress.expectedTotalBytes!
-                            : null,
+                        value:
+                            loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded /
+                                    loadingProgress.expectedTotalBytes!
+                                : null,
                         strokeWidth: 2,
                       ),
                     ),
@@ -119,9 +118,7 @@ class _TrendingMoviesSectionState extends State<TrendingMoviesSection>
   void _navigateToMovieDetails(Movie movie) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => MovieDetailsScreen(movie: movie),
-      ),
+      MaterialPageRoute(builder: (context) => MovieDetailsScreen(movie: movie)),
     );
   }
 
@@ -151,17 +148,19 @@ class _TrendingMoviesSectionState extends State<TrendingMoviesSection>
                   ),
                   const SizedBox(width: 8),
                   const Text(
-                    'Trending Movies',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    '',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
               TextButton.icon(
                 onPressed: () {
-                  // Navigate to see all trending movies
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const TrendingMoviesScreen(),
+                    ),
+                  );
                 },
                 icon: const Icon(Icons.arrow_forward, size: 16),
                 label: const Text('See all'),
@@ -189,8 +188,9 @@ class _TrendingMoviesSectionState extends State<TrendingMoviesSection>
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               itemCount: _trendingMovies.length,
-              itemBuilder: (context, index) =>
-                  _buildMovieCard(_trendingMovies[index], index),
+              itemBuilder:
+                  (context, index) =>
+                      _buildMovieCard(_trendingMovies[index], index),
             ),
           ),
         // Subtle divider
@@ -206,9 +206,7 @@ class _TrendingMoviesSectionState extends State<TrendingMoviesSection>
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

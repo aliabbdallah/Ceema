@@ -12,16 +12,19 @@ class Preference {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type,
-        'name': name,
-        'weight': weight,
-      };
+    'id': id,
+    'type': type,
+    'name': name,
+    'weight': weight,
+  };
 
   factory Preference.fromJson(Map<String, dynamic> json) => Preference(
-        id: json['id'] as String,
-        type: json['type'] as String,
-        name: json['name'] as String,
-        weight: (json['weight'] as num).toDouble(),
-      );
+    id: json['id'] as String,
+    type: json['type'] as String,
+    name: json['name'] as String,
+    weight:
+        (json['weight'] is int)
+            ? (json['weight'] as int).toDouble()
+            : (json['weight'] as num).toDouble(),
+  );
 }

@@ -43,6 +43,104 @@ class _SignUpScreenState extends State<SignUpScreen> {
   File? _selectedImageFile;
   bool _isUploadingImage = false;
 
+  // Add validation methods
+  String? _validateEmail(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter your email';
+    }
+
+    // Email format validation
+    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    if (!emailRegex.hasMatch(value)) {
+      return 'Please enter a valid email address';
+    }
+
+    return null;
+  }
+
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter a password';
+    }
+
+    // Password strength validation
+    if (value.length < 8) {
+      return 'Password must be at least 8 characters long';
+    }
+
+    if (!value.contains(RegExp(r'[A-Z]'))) {
+      return 'Password must contain at least one uppercase letter';
+    }
+
+    if (!value.contains(RegExp(r'[a-z]'))) {
+      return 'Password must contain at least one lowercase letter';
+    }
+
+    if (!value.contains(RegExp(r'[0-9]'))) {
+      return 'Password must contain at least one number';
+    }
+
+    if (!value.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) {
+      return 'Password must contain at least one special character';
+    }
+
+    return null;
+  }
+
+  String? _validateUsername(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter a username';
+    }
+
+    // Username format validation
+    if (value.length < 3) {
+      return 'Username must be at least 3 characters long';
+    }
+
+    if (value.length > 20) {
+      return 'Username cannot be longer than 20 characters';
+    }
+
+    if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(value)) {
+      return 'Username can only contain letters, numbers, and underscores';
+    }
+
+    if (value.startsWith('_') || value.endsWith('_')) {
+      return 'Username cannot start or end with an underscore';
+    }
+
+    return null;
+  }
+
+  String? _validateName(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter your name';
+    }
+
+    // Name format validation
+    if (value.length < 2) {
+      return 'Name must be at least 2 characters long';
+    }
+
+    if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(value)) {
+      return 'Name can only contain letters and spaces';
+    }
+
+    return null;
+  }
+
+  String? _validateConfirmPassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Please confirm your password';
+    }
+
+    if (value != _passwordController.text) {
+      return 'Passwords do not match';
+    }
+
+    return null;
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -146,6 +244,28 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return null;
   }
 
+  // Add method to check if email exists
+  Future<bool> _checkEmailExists(String email) async {
+    try {
+      final signInMethods = await _auth.fetchSignInMethodsForEmail(email);
+      return signInMethods.isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Add method to capitalize name
+  String _capitalizeName(String name) {
+    if (name.isEmpty) return name;
+    return name
+        .split(' ')
+        .map((word) {
+          if (word.isEmpty) return word;
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
+  }
+
   Future<void> _handleSignUp() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -161,38 +281,73 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return;
     }
 
+    // Check if email already exists
+    final emailExists = await _checkEmailExists(_emailController.text.trim());
+    if (emailExists) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('An account with this email already exists'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Validate username uniqueness before proceeding
+    try {
+      final usernameQuery =
+          await _firestore
+              .collection('users')
+              .where('username', isEqualTo: _usernameController.text.trim())
+              .get();
+
+      if (usernameQuery.docs.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This username is already taken'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error checking username: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
 
     try {
-      // First create the user account
-      final UserCredential userCredential =
-          await _auth.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
+      // Capitalize the name before creating the account
+      final capitalizedName = _capitalizeName(_nameController.text.trim());
 
-      // If user creation is successful, attempt to send verification email
-      if (userCredential.user != null) {
-        try {
-          await userCredential.user!.sendEmailVerification();
-        } catch (e) {
-          // If email verification fails, delete the user account and show error
-          await userCredential.user!.delete();
-          throw FirebaseAuthException(
-            code: 'verification-email-failed',
-            message: 'Failed to send verification email. Please try again.',
+      // Create the user account
+      final UserCredential userCredential = await _auth
+          .createUserWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
           );
-        }
 
-        // Upload the profile image if one was selected
-        final String? profileImageUrl =
-            await _uploadImageToStorage(userCredential.user!.uid);
+      if (userCredential.user != null) {
+        // Send verification email
+        await userCredential.user!.sendEmailVerification();
 
-        // Only store user data if verification email was sent successfully
+        // Upload profile image if selected
+        final String? profileImageUrl = await _uploadImageToStorage(
+          userCredential.user!.uid,
+        );
+
+        // Store user data in Firestore with capitalized name
         await _firestore.collection('users').doc(userCredential.user!.uid).set({
           'username': _usernameController.text.trim(),
+          'displayName': capitalizedName,
           'email': _emailController.text.trim(),
           'createdAt': FieldValue.serverTimestamp(),
           'bio': '',
@@ -204,118 +359,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
           'emailVerified': false,
         });
 
-        // Update the user's display name
-        await userCredential.user!
-            .updateDisplayName(_nameController.text.trim());
-
-        // Update the user's profile photo:
-        // 1. If it's a network URL (from Storage), use it directly
-        // 2. If it's an asset path, we need to save null since Firebase Auth can't handle asset paths
-        if (profileImageUrl != null) {
-          if (profileImageUrl.startsWith('http')) {
-            // Network URL - can be used directly
-            await userCredential.user!.updatePhotoURL(profileImageUrl);
-          } else if (profileImageUrl.startsWith('assets/')) {
-            // Asset path - store null in Firebase Auth but keep the asset path in Firestore
-            // This is OK because our ProfileImageWidget properly handles both types
-            await userCredential.user!.updatePhotoURL(null);
-          }
-        }
-
-        // Show success message with verification info
+        // Show success message and redirect to sign-in screen
         if (mounted) {
-          // Show a dialog explaining the verification requirement
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                title: const Text('Email Verification Required'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'We\'ve sent a verification link to your email address. You must verify your email before you can sign in.',
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Please check your inbox and spam folder.',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        const Icon(Icons.info_outline,
-                            color: Colors.blue, size: 16),
-                        const SizedBox(width: 8),
-                        const Expanded(
-                          child: Text(
-                            'You will be redirected to the sign-in screen.',
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      // Navigate to the sign-in screen
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(
-                          builder: (context) => const SignInScreen(),
-                        ),
-                        (route) => false,
-                      );
-                    },
-                    child: const Text('OK'),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      try {
-                        await _auth.currentUser!.sendEmailVerification();
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                  'Verification email resent! Please check your inbox and spam folder.'),
-                              backgroundColor: Colors.green,
-                              duration: Duration(seconds: 5),
-                            ),
-                          );
-                        }
-                      } on FirebaseAuthException catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(e.message ??
-                                  'Failed to resend verification email'),
-                              backgroundColor: Colors.red,
-                              duration: Duration(seconds: 5),
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                  'An unexpected error occurred. Please try again.'),
-                              backgroundColor: Colors.red,
-                              duration: Duration(seconds: 5),
-                            ),
-                          );
-                        }
-                      }
-                    },
-                    child: const Text('Resend Email'),
-                  ),
-                ],
-              );
-            },
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Verification email sent! Please check your inbox.',
+              ),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
           );
+
+          // Navigate to sign-in screen after a short delay
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const SignInScreen()),
+                (route) => false,
+              );
+            }
+          });
         }
       }
     } on FirebaseAuthException catch (e) {
@@ -337,19 +401,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString()),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -383,15 +441,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 Text(
                   'Create Account',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Join the community of movie enthusiasts',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Colors.grey[600],
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 24),
 
@@ -407,27 +465,30 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             decoration: BoxDecoration(
                               color: Colors.grey[200],
                               shape: BoxShape.circle,
-                              image: _selectedImageFile != null
-                                  ? DecorationImage(
-                                      image: FileImage(_selectedImageFile!),
-                                      fit: BoxFit.cover,
-                                    )
-                                  : _selectedPresetAvatar != null
+                              image:
+                                  _selectedImageFile != null
                                       ? DecorationImage(
-                                          image: AssetImage(
-                                              _selectedPresetAvatar!),
-                                          fit: BoxFit.cover,
-                                        )
+                                        image: FileImage(_selectedImageFile!),
+                                        fit: BoxFit.cover,
+                                      )
+                                      : _selectedPresetAvatar != null
+                                      ? DecorationImage(
+                                        image: AssetImage(
+                                          _selectedPresetAvatar!,
+                                        ),
+                                        fit: BoxFit.cover,
+                                      )
                                       : null,
                             ),
-                            child: _selectedImageFile == null &&
-                                    _selectedPresetAvatar == null
-                                ? const Icon(
-                                    Icons.person,
-                                    size: 60,
-                                    color: Colors.grey,
-                                  )
-                                : null,
+                            child:
+                                _selectedImageFile == null &&
+                                        _selectedPresetAvatar == null
+                                    ? const Icon(
+                                      Icons.person,
+                                      size: 60,
+                                      color: Colors.grey,
+                                    )
+                                    : null,
                           ),
                           Positioned(
                             bottom: 0,
@@ -448,33 +509,39 @@ class _SignUpScreenState extends State<SignUpScreen> {
                                 onPressed: () {
                                   showModalBottomSheet(
                                     context: context,
-                                    builder: (context) => Container(
-                                      padding: const EdgeInsets.all(16.0),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          ListTile(
-                                            leading:
-                                                const Icon(Icons.photo_library),
-                                            title: const Text(
-                                                'Choose from Gallery'),
-                                            onTap: () {
-                                              Navigator.pop(context);
-                                              _pickImage();
-                                            },
+                                    builder:
+                                        (context) => Container(
+                                          padding: const EdgeInsets.all(16.0),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              ListTile(
+                                                leading: const Icon(
+                                                  Icons.photo_library,
+                                                ),
+                                                title: const Text(
+                                                  'Choose from Gallery',
+                                                ),
+                                                onTap: () {
+                                                  Navigator.pop(context);
+                                                  _pickImage();
+                                                },
+                                              ),
+                                              ListTile(
+                                                leading: const Icon(
+                                                  Icons.camera_alt,
+                                                ),
+                                                title: const Text(
+                                                  'Take a Photo',
+                                                ),
+                                                onTap: () {
+                                                  Navigator.pop(context);
+                                                  _takePhoto();
+                                                },
+                                              ),
+                                            ],
                                           ),
-                                          ListTile(
-                                            leading:
-                                                const Icon(Icons.camera_alt),
-                                            title: const Text('Take a Photo'),
-                                            onTap: () {
-                                              Navigator.pop(context);
-                                              _takePhoto();
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                                        ),
                                   );
                                 },
                               ),
@@ -513,12 +580,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           margin: const EdgeInsets.symmetric(horizontal: 8),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: _selectedPresetAvatar == avatar
-                                ? Border.all(
-                                    color: Theme.of(context).primaryColor,
-                                    width: 3,
-                                  )
-                                : null,
+                            border:
+                                _selectedPresetAvatar == avatar
+                                    ? Border.all(
+                                      color: Theme.of(context).primaryColor,
+                                      width: 3,
+                                    )
+                                    : null,
                             image: DecorationImage(
                               image: AssetImage(avatar),
                               fit: BoxFit.cover,
@@ -532,9 +600,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                 const SizedBox(height: 24),
 
-                // Name field
+                // Name field with auto-capitalization
                 TextFormField(
                   controller: _nameController,
+                  textCapitalization: TextCapitalization.words,
                   decoration: InputDecoration(
                     labelText: 'Full Name',
                     prefixIcon: const Icon(Icons.person),
@@ -542,12 +611,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your name';
-                    }
-                    return null;
-                  },
+                  validator: _validateName,
                 ),
                 const SizedBox(height: 16),
 
@@ -561,15 +625,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a username';
-                    }
-                    if (value.contains(' ')) {
-                      return 'Username cannot contain spaces';
-                    }
-                    return null;
-                  },
+                  validator: _validateUsername,
                 ),
                 const SizedBox(height: 16),
 
@@ -584,15 +640,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your email';
-                    }
-                    if (!value.contains('@')) {
-                      return 'Please enter a valid email';
-                    }
-                    return null;
-                  },
+                  validator: _validateEmail,
                 ),
                 const SizedBox(height: 16),
 
@@ -619,15 +667,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a password';
-                    }
-                    if (value.length < 6) {
-                      return 'Password must be at least 6 characters';
-                    }
-                    return null;
-                  },
+                  validator: _validatePassword,
                 ),
                 const SizedBox(height: 16),
 
@@ -655,15 +695,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please confirm your password';
-                    }
-                    if (value != _passwordController.text) {
-                      return 'Passwords do not match';
-                    }
-                    return null;
-                  },
+                  validator: _validateConfirmPassword,
                 ),
                 const SizedBox(height: 16),
 
@@ -690,29 +722,32 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                 // Sign up button
                 ElevatedButton(
-                  onPressed: (_isLoading || _isUploadingImage || !_acceptTerms)
-                      ? null
-                      : _handleSignUp,
+                  onPressed:
+                      (_isLoading || _isUploadingImage || !_acceptTerms)
+                          ? null
+                          : _handleSignUp,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: _isLoading || _isUploadingImage
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
+                  child:
+                      _isLoading || _isUploadingImage
+                          ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                          : const Text(
+                            'Sign Up',
+                            style: TextStyle(fontSize: 16),
                           ),
-                        )
-                      : const Text(
-                          'Sign Up',
-                          style: TextStyle(fontSize: 16),
-                        ),
                 ),
               ],
             ),

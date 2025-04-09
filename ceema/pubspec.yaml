@@ -44,4 +44,6 @@ flutter:
   assets:
     - assets/animations/
     - assets/avatars/
+    - assets/images/ceema_logo.png
+
 

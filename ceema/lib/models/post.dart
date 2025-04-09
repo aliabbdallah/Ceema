@@ -38,8 +38,8 @@ class Post {
   Map<String, dynamic> toJson() {
     return {
       'userId': userId,
-      'userName': userName,
-      'userAvatar': userAvatar,
+      'username': userName,
+      'profileImageUrl': userAvatar,
       'content': content,
       'movieId': movieId,
       'movieTitle': movieTitle,
@@ -64,8 +64,8 @@ class Post {
     return Post(
       id: documentId,
       userId: json['userId'] ?? '',
-      userName: json['userName'] ?? '',
-      userAvatar: json['userAvatar'] ?? '',
+      userName: json['username'] ?? json['userName'] ?? '',
+      userAvatar: json['profileImageUrl'] ?? json['userAvatar'] ?? '',
       content: json['content'] ?? '',
       movieId: json['movieId'] ?? '',
       movieTitle: json['movieTitle'] ?? '',

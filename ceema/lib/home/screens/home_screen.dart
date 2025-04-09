@@ -1,10 +1,10 @@
-// lib/home/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import '../components/feed_screen.dart';
 import 'package:ceema/screens/diary_screen.dart';
 import 'package:ceema/screens/profile_screen.dart';
 import 'package:ceema/screens/watchlist_screen.dart';
 import 'package:ceema/services/automatic_preference_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -23,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen>
   final AutomaticPreferenceService _automaticPreferenceService =
       AutomaticPreferenceService();
   bool _isInitializing = true;
+  final _auth = FirebaseAuth.instance;
 
   @override
   void initState() {
@@ -32,10 +33,7 @@ class _HomeScreenState extends State<HomeScreen>
       duration: const Duration(milliseconds: 300),
     );
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
     _animationController.forward();
 
@@ -90,41 +88,44 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final currentUser = _auth.currentUser;
     final List<Widget> screens = [
       const SeamlessFeedScreen(),
       const DiaryScreen(),
-      const WatchlistScreen(),
-      const ProfileScreen(),
+      WatchlistScreen(userId: currentUser?.uid ?? '', isCurrentUser: true),
+      ProfileScreen(userId: currentUser?.uid ?? '', isCurrentUser: true),
     ];
 
     return Scaffold(
       // Show loading indicator if preferences are being initialized
-      body: _isInitializing
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Personalizing your experience...'),
-                ],
+      body:
+          _isInitializing
+              ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Personalizing your experience...'),
+                  ],
+                ),
+              )
+              : FadeTransition(
+                opacity: _fadeAnimation,
+                child: PageView(
+                  controller: _pageController,
+                  physics:
+                      _isPageChanging
+                          ? const NeverScrollableScrollPhysics()
+                          : const NeverScrollableScrollPhysics(), // Disable swipe to change tabs
+                  onPageChanged: (index) {
+                    if (!_isPageChanging) {
+                      setState(() => _currentTab = index);
+                    }
+                  },
+                  children: screens,
+                ),
               ),
-            )
-          : FadeTransition(
-              opacity: _fadeAnimation,
-              child: PageView(
-                controller: _pageController,
-                physics: _isPageChanging
-                    ? const NeverScrollableScrollPhysics()
-                    : const NeverScrollableScrollPhysics(), // Disable swipe to change tabs
-                onPageChanged: (index) {
-                  if (!_isPageChanging) {
-                    setState(() => _currentTab = index);
-                  }
-                },
-                children: screens,
-              ),
-            ),
       bottomNavigationBar: NavigationBar(
         elevation: 0,
         backgroundColor: colorScheme.surface,

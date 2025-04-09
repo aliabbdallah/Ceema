@@ -6,16 +6,14 @@ import '../../services/post_service.dart';
 import '../../widgets/movie_selection_dialog.dart';
 import '../../widgets/star_rating.dart';
 import '../../widgets/profile_image_widget.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ComposePostSection extends StatefulWidget {
   final VoidCallback onCancel;
   final double? maxHeight;
 
-  const ComposePostSection({
-    Key? key,
-    required this.onCancel,
-    this.maxHeight,
-  }) : super(key: key);
+  const ComposePostSection({Key? key, required this.onCancel, this.maxHeight})
+    : super(key: key);
 
   @override
   _ComposePostSectionState createState() => _ComposePostSectionState();
@@ -26,6 +24,7 @@ class _ComposePostSectionState extends State<ComposePostSection> {
   final PostService _postService = PostService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FocusNode _focusNode = FocusNode();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Movie? _selectedMovie;
   double _rating = 0.0;
@@ -55,11 +54,12 @@ class _ComposePostSectionState extends State<ComposePostSection> {
   void _showMovieSelection() async {
     final Movie? selectedMovie = await showDialog<Movie>(
       context: context,
-      builder: (context) => MovieSelectionDialog(
-        onMovieSelected: (movie) {
-          Navigator.pop(context, movie);
-        },
-      ),
+      builder:
+          (context) => MovieSelectionDialog(
+            onMovieSelected: (movie) {
+              Navigator.pop(context, movie);
+            },
+          ),
     );
 
     if (selectedMovie != null) {
@@ -92,10 +92,15 @@ class _ComposePostSectionState extends State<ComposePostSection> {
 
     try {
       final user = _auth.currentUser!;
+
+      // Get user data from Firestore
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      final userData = userDoc.data() ?? {};
+
       await _postService.createPost(
         userId: user.uid,
-        userName: user.displayName ?? 'User',
-        userAvatar: user.photoURL ?? '',
+        userName: userData['username'] ?? user.displayName ?? 'Anonymous',
+        userAvatar: userData['profileImageUrl'] ?? user.photoURL ?? '',
         content: _postController.text.trim(),
         movie: _selectedMovie!,
         rating: _rating,
@@ -148,12 +153,13 @@ class _ComposePostSectionState extends State<ComposePostSection> {
               width: 40,
               height: 60,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
-                width: 40,
-                height: 60,
-                color: Colors.grey[300],
-                child: const Icon(Icons.movie),
-              ),
+              errorBuilder:
+                  (context, error, stackTrace) => Container(
+                    width: 40,
+                    height: 60,
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.movie),
+                  ),
             ),
           ),
           const SizedBox(width: 12),
@@ -172,10 +178,9 @@ class _ComposePostSectionState extends State<ComposePostSection> {
                 Text(
                   _selectedMovie!.year,
                   style: TextStyle(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withOpacity(0.6),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.6),
                     fontSize: 12,
                   ),
                 ),
@@ -201,10 +206,7 @@ class _ComposePostSectionState extends State<ComposePostSection> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text(
-          'Rating: ',
-          style: TextStyle(fontSize: 14),
-        ),
+        const Text('Rating: ', style: TextStyle(fontSize: 14)),
         StarRating(
           rating: _rating,
           size: 24,
@@ -243,24 +245,22 @@ class _ComposePostSectionState extends State<ComposePostSection> {
         const Spacer(),
 
         // Cancel Button
-        TextButton(
-          onPressed: widget.onCancel,
-          child: const Text('Cancel'),
-        ),
+        TextButton(onPressed: widget.onCancel, child: const Text('Cancel')),
 
         // Post Button
         ElevatedButton(
           onPressed: _isLoading ? null : _handlePost,
-          child: _isLoading
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-              : const Text('Post'),
+          child:
+              _isLoading
+                  ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                  : const Text('Post'),
         ),
       ],
     );

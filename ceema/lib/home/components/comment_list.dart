@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/post_service.dart';
 import 'comment_card.dart';
 import '../../widgets/profile_image_widget.dart';
@@ -7,10 +8,7 @@ import '../../widgets/profile_image_widget.dart';
 class CommentList extends StatefulWidget {
   final String postId;
 
-  const CommentList({
-    Key? key,
-    required this.postId,
-  }) : super(key: key);
+  const CommentList({Key? key, required this.postId}) : super(key: key);
 
   @override
   State<CommentList> createState() => _CommentListState();
@@ -37,11 +35,23 @@ class _CommentListState extends State<CommentList> {
 
     try {
       final user = _auth.currentUser!;
+
+      // Get user data from Firestore
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+      final userData = userDoc.data() ?? {};
+
       await _postService.addComment(
         postId: widget.postId,
         userId: user.uid,
-        userName: user.displayName ?? 'Anonymous',
-        userAvatar: user.photoURL ?? 'https://via.placeholder.com/150',
+        userName: userData['username'] ?? user.displayName ?? 'Anonymous',
+        userAvatar:
+            userData['profileImageUrl'] ??
+            user.photoURL ??
+            'https://via.placeholder.com/150',
         content: _commentController.text.trim(),
       );
       _commentController.clear();
@@ -139,13 +149,14 @@ class _CommentListState extends State<CommentList> {
                 ),
               ),
               IconButton(
-                icon: _isSubmitting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send),
+                icon:
+                    _isSubmitting
+                        ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : const Icon(Icons.send),
                 onPressed: _isSubmitting ? null : _submitComment,
               ),
             ],

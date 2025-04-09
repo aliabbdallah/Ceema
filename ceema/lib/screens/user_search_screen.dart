@@ -7,9 +7,9 @@ import 'package:http/http.dart' as http;
 import '../models/user.dart';
 import '../models/post.dart';
 import '../models/movie.dart';
-import '../models/friend_request.dart';
-import '../services/friend_request_service.dart';
-import '../services/friend_service.dart';
+import '../models/follow_request.dart';
+import '../services/follow_request_service.dart';
+import '../services/follow_service.dart';
 import '../services/post_service.dart';
 import '../services/tmdb_service.dart';
 import '../screens/user_profile_screen.dart';
@@ -30,8 +30,8 @@ class _UserSearchScreenState extends State<UserSearchScreen>
   final TextEditingController _searchController = TextEditingController();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FriendRequestService _requestService = FriendRequestService();
-  final FriendService _friendService = FriendService();
+  final FollowRequestService _requestService = FollowRequestService();
+  final FollowService _followService = FollowService();
   final PostService _postService = PostService();
   final TMDBService _tmdbService = TMDBService();
 
@@ -81,35 +81,37 @@ class _UserSearchScreenState extends State<UserSearchScreen>
     if (currentUserId == null) return;
 
     try {
-      final searches = await _firestore
-          .collection('userSearches')
-          .doc(currentUserId)
-          .collection('recent')
-          .orderBy('timestamp', descending: true)
-          .limit(5)
-          .get();
+      final searches =
+          await _firestore
+              .collection('userSearches')
+              .doc(currentUserId)
+              .collection('recent')
+              .orderBy('timestamp', descending: true)
+              .limit(5)
+              .get();
 
       if (mounted) {
         setState(() {
-          _recentSearches = searches.docs
-              .map((doc) {
-                final data = doc.data();
-                if (data.containsKey('userId')) {
-                  return UserModel(
-                    id: data['userId'],
-                    username: data['username'] ?? '',
-                    profileImageUrl: data['profileImageUrl'],
-                    bio: data['bio'],
-                    email: '',
-                    favoriteGenres: [],
-                    createdAt: DateTime.now(),
-                  );
-                }
-                return null;
-              })
-              .where((user) => user != null)
-              .cast<UserModel>()
-              .toList();
+          _recentSearches =
+              searches.docs
+                  .map((doc) {
+                    final data = doc.data();
+                    if (data.containsKey('userId')) {
+                      return UserModel(
+                        id: data['userId'],
+                        username: data['username'] ?? '',
+                        profileImageUrl: data['profileImageUrl'],
+                        bio: data['bio'],
+                        email: '',
+                        favoriteGenres: [],
+                        createdAt: DateTime.now(),
+                      );
+                    }
+                    return null;
+                  })
+                  .where((user) => user != null)
+                  .cast<UserModel>()
+                  .toList();
         });
       }
     } catch (e) {
@@ -124,22 +126,26 @@ class _UserSearchScreenState extends State<UserSearchScreen>
     try {
       // Get a list of users the current user is following
       final followingList =
-          await _friendService.getFollowing(currentUserId).first;
+          await _followService.getFollowing(currentUserId).first;
       final followingIds = followingList.map((user) => user.id).toList();
 
       // Get users with most followers, excluding those the user already follows
-      final suggestedUserDocs = await _firestore
-          .collection('users')
-          .orderBy('followerCount', descending: true)
-          .limit(10)
-          .get();
+      final suggestedUserDocs =
+          await _firestore
+              .collection('users')
+              .orderBy('followerCount', descending: true)
+              .limit(10)
+              .get();
 
-      final suggestions = suggestedUserDocs.docs
-          .map((doc) => UserModel.fromJson(doc.data(), doc.id))
-          .where((user) =>
-              user.id != currentUserId && !followingIds.contains(user.id))
-          .take(5)
-          .toList();
+      final suggestions =
+          suggestedUserDocs.docs
+              .map((doc) => UserModel.fromJson(doc.data(), doc.id))
+              .where(
+                (user) =>
+                    user.id != currentUserId && !followingIds.contains(user.id),
+              )
+              .take(5)
+              .toList();
 
       if (mounted) {
         setState(() {
@@ -189,40 +195,43 @@ class _UserSearchScreenState extends State<UserSearchScreen>
     try {
       // Get all users first
       final querySnapshot = await _firestore.collection('users').get();
-      
+
       // Filter users using fuzzy search
-      final users = querySnapshot.docs
-          .where((doc) => doc.id != _auth.currentUser!.uid)
-          .map((doc) => UserModel.fromJson(doc.data(), doc.id))
-          .toList();
+      final users =
+          querySnapshot.docs
+              .where((doc) => doc.id != _auth.currentUser!.uid)
+              .map((doc) => UserModel.fromJson(doc.data(), doc.id))
+              .toList();
 
       // Apply multi-step search filtering
-      final filteredUsers = users.where((user) {
-        final username = user.username.toLowerCase();
-        final searchQuery = query.toLowerCase();
-        
-        // First try exact match
-        if (username.contains(searchQuery)) {
-          return true;
-        }
+      final filteredUsers =
+          users.where((user) {
+            final username = user.username.toLowerCase();
+            final searchQuery = query.toLowerCase();
 
-        // Try removing spaces
-        final noSpacesQuery = searchQuery.replaceAll(' ', '');
-        if (noSpacesQuery != searchQuery && username.contains(noSpacesQuery)) {
-          return true;
-        }
-        
-        // Try common spelling variations
-        final variations = _getSpellingVariations(searchQuery);
-        for (final variation in variations) {
-          if (username.contains(variation)) {
-            return true;
-          }
-        }
-        
-        // Finally try fuzzy match
-        return FuzzySearch.isSimilar(searchQuery, username, threshold: 0.6);
-      }).toList();
+            // First try exact match
+            if (username.contains(searchQuery)) {
+              return true;
+            }
+
+            // Try removing spaces
+            final noSpacesQuery = searchQuery.replaceAll(' ', '');
+            if (noSpacesQuery != searchQuery &&
+                username.contains(noSpacesQuery)) {
+              return true;
+            }
+
+            // Try common spelling variations
+            final variations = _getSpellingVariations(searchQuery);
+            for (final variation in variations) {
+              if (username.contains(variation)) {
+                return true;
+              }
+            }
+
+            // Finally try fuzzy match
+            return FuzzySearch.isSimilar(searchQuery, username, threshold: 0.6);
+          }).toList();
 
       if (mounted) {
         setState(() {
@@ -232,9 +241,9 @@ class _UserSearchScreenState extends State<UserSearchScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error searching users: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error searching users: $e')));
         setState(() => _isLoadingUsers = false);
       }
     }
@@ -245,45 +254,58 @@ class _UserSearchScreenState extends State<UserSearchScreen>
 
     try {
       // Get all posts first
-      final querySnapshot = await _firestore
-          .collection('posts')
-          .orderBy('createdAt', descending: true)
-          .get();
+      final querySnapshot =
+          await _firestore
+              .collection('posts')
+              .orderBy('createdAt', descending: true)
+              .get();
 
       // Apply multi-step search filtering
-      final posts = querySnapshot.docs
-          .map((doc) => Post.fromJson(doc.data(), doc.id))
-          .where((post) {
-            final content = post.content.toLowerCase();
-            final movieTitle = post.movieTitle.toLowerCase();
-            final searchQuery = query.toLowerCase();
+      final posts =
+          querySnapshot.docs
+              .map((doc) => Post.fromJson(doc.data(), doc.id))
+              .where((post) {
+                final content = post.content.toLowerCase();
+                final movieTitle = post.movieTitle.toLowerCase();
+                final searchQuery = query.toLowerCase();
 
-            // First try exact matches
-            if (content.contains(searchQuery) || movieTitle.contains(searchQuery)) {
-              return true;
-            }
+                // First try exact matches
+                if (content.contains(searchQuery) ||
+                    movieTitle.contains(searchQuery)) {
+                  return true;
+                }
 
-            // Try removing spaces
-            final noSpacesQuery = searchQuery.replaceAll(' ', '');
-            if (noSpacesQuery != searchQuery) {
-              if (content.contains(noSpacesQuery) || movieTitle.contains(noSpacesQuery)) {
-                return true;
-              }
-            }
+                // Try removing spaces
+                final noSpacesQuery = searchQuery.replaceAll(' ', '');
+                if (noSpacesQuery != searchQuery) {
+                  if (content.contains(noSpacesQuery) ||
+                      movieTitle.contains(noSpacesQuery)) {
+                    return true;
+                  }
+                }
 
-            // Try common spelling variations
-            final variations = _getSpellingVariations(searchQuery);
-            for (final variation in variations) {
-              if (content.contains(variation) || movieTitle.contains(variation)) {
-                return true;
-              }
-            }
+                // Try common spelling variations
+                final variations = _getSpellingVariations(searchQuery);
+                for (final variation in variations) {
+                  if (content.contains(variation) ||
+                      movieTitle.contains(variation)) {
+                    return true;
+                  }
+                }
 
-            // Finally try fuzzy matches
-            return FuzzySearch.isSimilar(searchQuery, content, threshold: 0.6) ||
-                   FuzzySearch.isSimilar(searchQuery, movieTitle, threshold: 0.6);
-          })
-          .toList();
+                // Finally try fuzzy matches
+                return FuzzySearch.isSimilar(
+                      searchQuery,
+                      content,
+                      threshold: 0.6,
+                    ) ||
+                    FuzzySearch.isSimilar(
+                      searchQuery,
+                      movieTitle,
+                      threshold: 0.6,
+                    );
+              })
+              .toList();
 
       if (mounted) {
         setState(() {
@@ -293,9 +315,9 @@ class _UserSearchScreenState extends State<UserSearchScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error searching posts: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error searching posts: $e')));
         setState(() => _isLoadingPosts = false);
       }
     }
@@ -307,7 +329,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
     try {
       // Try the original query first
       var movies = await _tmdbService.searchMovies(query);
-      
+
       // If no results, try some common spelling variations
       if (movies.isEmpty) {
         // Try removing spaces
@@ -315,7 +337,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
         if (noSpacesQuery != query) {
           movies = await _tmdbService.searchMovies(noSpacesQuery);
         }
-        
+
         // If still no results, try common misspellings
         if (movies.isEmpty) {
           final variations = _getSpellingVariations(query);
@@ -327,20 +349,21 @@ class _UserSearchScreenState extends State<UserSearchScreen>
       }
 
       // Apply fuzzy search filtering to the results
-      final filteredMovies = movies.where((movie) {
-        final title = movie.title.toLowerCase();
-        final overview = movie.overview.toLowerCase();
-        final searchQuery = query.toLowerCase();
+      final filteredMovies =
+          movies.where((movie) {
+            final title = movie.title.toLowerCase();
+            final overview = movie.overview.toLowerCase();
+            final searchQuery = query.toLowerCase();
 
-        // First try exact matches
-        if (title.contains(searchQuery) || overview.contains(searchQuery)) {
-          return true;
-        }
+            // First try exact matches
+            if (title.contains(searchQuery) || overview.contains(searchQuery)) {
+              return true;
+            }
 
-        // Then try fuzzy matches
-        return FuzzySearch.isSimilar(searchQuery, title, threshold: 0.6) ||
-               FuzzySearch.isSimilar(searchQuery, overview, threshold: 0.6);
-      }).toList();
+            // Then try fuzzy matches
+            return FuzzySearch.isSimilar(searchQuery, title, threshold: 0.6) ||
+                FuzzySearch.isSimilar(searchQuery, overview, threshold: 0.6);
+          }).toList();
 
       if (mounted) {
         setState(() {
@@ -350,9 +373,9 @@ class _UserSearchScreenState extends State<UserSearchScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error searching movies: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error searching movies: $e')));
         setState(() => _isLoadingMovies = false);
       }
     }
@@ -361,7 +384,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
   List<String> _getSpellingVariations(String query) {
     final variations = <String>[];
     final lowerQuery = query.toLowerCase();
-    
+
     // Common misspellings and variations
     if (lowerQuery.contains('lamd')) {
       variations.add(lowerQuery.replaceAll('lamd', 'land'));
@@ -372,7 +395,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
     if (lowerQuery.contains('lam')) {
       variations.add(lowerQuery.replaceAll('lam', 'land'));
     }
-    
+
     // Common actor/movie related misspellings
     if (lowerQuery.contains('actr')) {
       variations.add(lowerQuery.replaceAll('actr', 'actor'));
@@ -386,7 +409,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
     if (lowerQuery.contains('mov')) {
       variations.add(lowerQuery.replaceAll('mov', 'movie'));
     }
-    
+
     // Common name misspellings
     if (lowerQuery.contains('jon')) {
       variations.add(lowerQuery.replaceAll('jon', 'john'));
@@ -400,7 +423,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
     if (lowerQuery.contains('sara')) {
       variations.add(lowerQuery.replaceAll('sara', 'sarah'));
     }
-    
+
     // Try removing common suffixes
     if (lowerQuery.endsWith('s')) {
       variations.add(lowerQuery.substring(0, lowerQuery.length - 1));
@@ -408,7 +431,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
     if (lowerQuery.endsWith('es')) {
       variations.add(lowerQuery.substring(0, lowerQuery.length - 2));
     }
-    
+
     // Try adding common suffixes
     if (!lowerQuery.endsWith('s')) {
       variations.add('${lowerQuery}s');
@@ -416,7 +439,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
     if (!lowerQuery.endsWith('es')) {
       variations.add('${lowerQuery}es');
     }
-    
+
     return variations;
   }
 
@@ -426,7 +449,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
     try {
       // Try the original query first
       var results = await TMDBService.searchActors(query);
-      
+
       // If no results, try some common spelling variations
       if (results.isEmpty) {
         // Try removing spaces
@@ -434,7 +457,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
         if (noSpacesQuery != query) {
           results = await TMDBService.searchActors(noSpacesQuery);
         }
-        
+
         // If still no results, try common misspellings
         if (results.isEmpty) {
           final variations = _getSpellingVariations(query);
@@ -446,36 +469,40 @@ class _UserSearchScreenState extends State<UserSearchScreen>
       }
 
       // Apply multi-step search filtering
-      final filteredActors = results.where((actor) {
-        final name = actor['name']?.toString().toLowerCase() ?? '';
-        final department = actor['known_for_department']?.toString().toLowerCase() ?? '';
-        final searchQuery = query.toLowerCase();
+      final filteredActors =
+          results.where((actor) {
+            final name = actor['name']?.toString().toLowerCase() ?? '';
+            final department =
+                actor['known_for_department']?.toString().toLowerCase() ?? '';
+            final searchQuery = query.toLowerCase();
 
-        // First try exact matches
-        if (name.contains(searchQuery) || department.contains(searchQuery)) {
-          return true;
-        }
+            // First try exact matches
+            if (name.contains(searchQuery) ||
+                department.contains(searchQuery)) {
+              return true;
+            }
 
-        // Try removing spaces
-        final noSpacesQuery = searchQuery.replaceAll(' ', '');
-        if (noSpacesQuery != searchQuery) {
-          if (name.contains(noSpacesQuery) || department.contains(noSpacesQuery)) {
-            return true;
-          }
-        }
+            // Try removing spaces
+            final noSpacesQuery = searchQuery.replaceAll(' ', '');
+            if (noSpacesQuery != searchQuery) {
+              if (name.contains(noSpacesQuery) ||
+                  department.contains(noSpacesQuery)) {
+                return true;
+              }
+            }
 
-        // Try common spelling variations
-        final variations = _getSpellingVariations(searchQuery);
-        for (final variation in variations) {
-          if (name.contains(variation) || department.contains(variation)) {
-            return true;
-          }
-        }
+            // Try common spelling variations
+            final variations = _getSpellingVariations(searchQuery);
+            for (final variation in variations) {
+              if (name.contains(variation) || department.contains(variation)) {
+                return true;
+              }
+            }
 
-        // Finally try fuzzy matches
-        return FuzzySearch.isSimilar(searchQuery, name, threshold: 0.6) ||
-               FuzzySearch.isSimilar(searchQuery, department, threshold: 0.6);
-      }).toList();
+            // Finally try fuzzy matches
+            return FuzzySearch.isSimilar(searchQuery, name, threshold: 0.6) ||
+                FuzzySearch.isSimilar(searchQuery, department, threshold: 0.6);
+          }).toList();
 
       if (mounted) {
         setState(() {
@@ -485,9 +512,9 @@ class _UserSearchScreenState extends State<UserSearchScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error searching actors: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error searching actors: $e')));
         setState(() => _isLoadingActors = false);
       }
     }
@@ -504,12 +531,12 @@ class _UserSearchScreenState extends State<UserSearchScreen>
           .collection('recent')
           .doc(user.id)
           .set({
-        'userId': user.id,
-        'username': user.username,
-        'profileImageUrl': user.profileImageUrl,
-        'bio': user.bio,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
+            'userId': user.id,
+            'username': user.username,
+            'profileImageUrl': user.profileImageUrl,
+            'bio': user.bio,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
     } catch (e) {
       print('Error saving search history: $e');
     }
@@ -520,25 +547,28 @@ class _UserSearchScreenState extends State<UserSearchScreen>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => UserProfileScreen(
-          userId: user.id,
-          username: user.username,
-        ),
+        builder:
+            (context) =>
+                UserProfileScreen(userId: user.id, username: user.username),
       ),
     );
   }
 
-  Widget _buildUserItem(UserModel user,
-      {bool isRecent = false, bool isSuggested = false}) {
+  Widget _buildUserItem(
+    UserModel user, {
+    bool isRecent = false,
+    bool isSuggested = false,
+  }) {
     return FutureBuilder<bool>(
-      future: _friendService.isFollowing(_auth.currentUser!.uid, user.id),
+      future: _followService.isFollowing(user.id),
       builder: (context, isFollowingSnapshot) {
-        return FutureBuilder<List<FriendRequest>>(
+        return FutureBuilder<List<FollowRequest>>(
           future: _requestService.getPendingRequests(user.id).first,
           builder: (context, requestsSnapshot) {
             final isFollowing = isFollowingSnapshot.data ?? false;
-            final hasPendingRequest = requestsSnapshot.data?.any(
-                  (request) => request.senderId == _auth.currentUser!.uid,
+            final hasPendingRequest =
+                requestsSnapshot.data?.any(
+                  (request) => request.requesterId == _auth.currentUser!.uid,
                 ) ??
                 false;
 
@@ -566,7 +596,6 @@ class _UserSearchScreenState extends State<UserSearchScreen>
                     IconButton(
                       icon: const Icon(Icons.history, size: 16),
                       onPressed: () {
-                        // Show option to remove from history
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: const Text('Remove from search history?'),
@@ -594,89 +623,89 @@ class _UserSearchScreenState extends State<UserSearchScreen>
                     ),
                 ],
               ),
-              subtitle: user.bio != null && user.bio!.isNotEmpty
-                  ? Text(
-                      user.bio!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    )
-                  : null,
-              trailing: isFollowing
-                  ? ElevatedButton(
-                      onPressed: () async {
-                        try {
-                          await _friendService.unfollowUser(
-                            _auth.currentUser!.uid,
-                            user.id,
-                          );
-                          setState(() {}); // Refresh UI
-                        } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error: $e')),
-                            );
-                          }
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey[300],
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        minimumSize: const Size(0, 36),
-                        textStyle: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      child: const Text('Following'),
-                    )
-                  : hasPendingRequest
-                      ? OutlinedButton(
-                          onPressed: null,
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            minimumSize: const Size(0, 36),
-                            textStyle:
-                                const TextStyle(fontWeight: FontWeight.normal),
-                          ),
-                          child: const Text('Requested'),
-                        )
-                      : ElevatedButton(
-                          onPressed: () async {
-                            try {
-                              final currentUser = _auth.currentUser!;
-                              await _requestService.sendFriendRequest(
-                                senderId: currentUser.uid,
-                                senderName: currentUser.displayName ?? '',
-                                senderAvatar: currentUser.photoURL ?? '',
-                                receiverId: user.id,
-                                receiverName: user.username,
-                                receiverAvatar: user.profileImageUrl ?? '',
+              subtitle:
+                  user.bio != null && user.bio!.isNotEmpty
+                      ? Text(
+                        user.bio!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                      : null,
+              trailing:
+                  isFollowing
+                      ? ElevatedButton(
+                        onPressed: () async {
+                          try {
+                            await _followService.unfollowUser(user.id);
+                            setState(() {}); // Refresh UI
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
                               );
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('Friend request sent!')),
-                                );
-                                setState(() {}); // Refresh UI
-                              }
-                            } catch (e) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Error: $e')),
-                                );
-                              }
                             }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                Theme.of(context).colorScheme.primary,
-                            foregroundColor:
-                                Theme.of(context).colorScheme.onPrimary,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            minimumSize: const Size(0, 36),
-                            textStyle:
-                                const TextStyle(fontWeight: FontWeight.bold),
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[300],
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          minimumSize: const Size(0, 36),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.bold,
                           ),
-                          child: const Text('Follow'),
                         ),
+                        child: const Text('Following'),
+                      )
+                      : hasPendingRequest
+                      ? OutlinedButton(
+                        onPressed: null,
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          minimumSize: const Size(0, 36),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.normal,
+                          ),
+                        ),
+                        child: const Text('Requested'),
+                      )
+                      : ElevatedButton(
+                        onPressed: () async {
+                          try {
+                            final currentUser = _auth.currentUser!;
+                            await _requestService.sendFollowRequest(
+                              requesterId: currentUser.uid,
+                              targetId: user.id,
+                            );
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Follow request sent!'),
+                                ),
+                              );
+                              setState(() {}); // Refresh UI
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e')),
+                              );
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              Theme.of(context).colorScheme.primary,
+                          foregroundColor:
+                              Theme.of(context).colorScheme.onPrimary,
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          minimumSize: const Size(0, 36),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        child: const Text('Follow'),
+                      ),
               onTap: () => _navigateToUserProfile(user),
             );
           },
@@ -688,9 +717,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
   Widget _buildPostItem(Post post) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -700,15 +727,16 @@ class _UserSearchScreenState extends State<UserSearchScreen>
             Row(
               children: [
                 FutureBuilder<UserModel?>(
-                    future: _getUserData(post.userId),
-                    builder: (context, snapshot) {
-                      return ProfileImageWidget(
-                        imageUrl:
-                            post.userAvatar.isNotEmpty ? post.userAvatar : null,
-                        radius: 20,
-                        fallbackName: post.userName,
-                      );
-                    }),
+                  future: _getUserData(post.userId),
+                  builder: (context, snapshot) {
+                    return ProfileImageWidget(
+                      imageUrl:
+                          post.userAvatar.isNotEmpty ? post.userAvatar : null,
+                      radius: 20,
+                      fallbackName: post.userName,
+                    );
+                  },
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -721,10 +749,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
                       const SizedBox(height: 2),
                       Text(
                         'Posted a review',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 12,
-                        ),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
                       ),
                     ],
                   ),
@@ -764,10 +789,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
                       const SizedBox(height: 4),
                       Text(
                         post.movieYear,
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 14,
-                        ),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
                       ),
                       const SizedBox(height: 8),
                       if (post.rating > 0)
@@ -800,17 +822,15 @@ class _UserSearchScreenState extends State<UserSearchScreen>
                 Icon(
                   Icons.favorite,
                   size: 16,
-                  color: post.likes.contains(_auth.currentUser?.uid)
-                      ? Colors.red
-                      : Colors.grey,
+                  color:
+                      post.likes.contains(_auth.currentUser?.uid)
+                          ? Colors.red
+                          : Colors.grey,
                 ),
                 const SizedBox(width: 4),
                 Text(post.likes.length.toString()),
                 const SizedBox(width: 16),
-                const Icon(
-                  Icons.comment_outlined,
-                  size: 16,
-                ),
+                const Icon(Icons.comment_outlined, size: 16),
                 const SizedBox(width: 4),
                 Text(post.commentCount.toString()),
               ],
@@ -841,10 +861,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
           },
         ),
       ),
-      title: Text(
-        movie.title,
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
+      title: Text(movie.title, style: Theme.of(context).textTheme.titleMedium),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -854,10 +871,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
             movie.overview,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 12,
-            ),
+            style: TextStyle(color: Colors.grey[600], fontSize: 12),
           ),
         ],
       ),
@@ -874,35 +888,37 @@ class _UserSearchScreenState extends State<UserSearchScreen>
 
   Widget _buildActorItem(Map<String, dynamic> actor) {
     final profilePath = actor['profile_path'];
-    final profileUrl = profilePath != null
-        ? 'https://image.tmdb.org/t/p/w500$profilePath'
-        : null;
+    final profileUrl =
+        profilePath != null
+            ? 'https://image.tmdb.org/t/p/w500$profilePath'
+            : null;
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: profileUrl != null
-            ? Image.network(
-                profileUrl,
-                width: 50,
-                height: 75,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    width: 50,
-                    height: 75,
-                    color: Colors.grey[300],
-                    child: const Icon(Icons.person),
-                  );
-                },
-              )
-            : Container(
-                width: 50,
-                height: 75,
-                color: Colors.grey[300],
-                child: const Icon(Icons.person),
-              ),
+        child:
+            profileUrl != null
+                ? Image.network(
+                  profileUrl,
+                  width: 50,
+                  height: 75,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      width: 50,
+                      height: 75,
+                      color: Colors.grey[300],
+                      child: const Icon(Icons.person),
+                    );
+                  },
+                )
+                : Container(
+                  width: 50,
+                  height: 75,
+                  color: Colors.grey[300],
+                  child: const Icon(Icons.person),
+                ),
       ),
       title: Text(
         actor['name'],
@@ -910,10 +926,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
       ),
       subtitle: Text(
         actor['known_for_department'] ?? 'Actor',
-        style: TextStyle(
-          color: Colors.grey[600],
-          fontSize: 12,
-        ),
+        style: TextStyle(color: Colors.grey[600], fontSize: 12),
       ),
       onTap: () {
         Navigator.push(
@@ -962,10 +975,10 @@ class _UserSearchScreenState extends State<UserSearchScreen>
                         .collection('recent')
                         .get()
                         .then((snapshot) {
-                      for (final doc in snapshot.docs) {
-                        doc.reference.delete();
-                      }
-                    });
+                          for (final doc in snapshot.docs) {
+                            doc.reference.delete();
+                          }
+                        });
                     setState(() {
                       _recentSearches = [];
                     });
@@ -996,8 +1009,9 @@ class _UserSearchScreenState extends State<UserSearchScreen>
             style: Theme.of(context).textTheme.titleLarge,
           ),
         ),
-        ..._suggestedUsers
-            .map((user) => _buildUserItem(user, isSuggested: true)),
+        ..._suggestedUsers.map(
+          (user) => _buildUserItem(user, isSuggested: true),
+        ),
       ],
     );
   }
@@ -1009,22 +1023,13 @@ class _UserSearchScreenState extends State<UserSearchScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            icon,
-            size: 64,
-            color: colorScheme.onSurface.withOpacity(0.4),
-          ),
+          Icon(icon, size: 64, color: colorScheme.onSurface.withOpacity(0.4)),
           const SizedBox(height: 16),
-          Text(
-            message,
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          Text(message, style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           Text(
             'Try a different search term',
-            style: TextStyle(
-              color: colorScheme.onSurface.withOpacity(0.6),
-            ),
+            style: TextStyle(color: colorScheme.onSurface.withOpacity(0.6)),
           ),
         ],
       ),
@@ -1065,10 +1070,9 @@ class _UserSearchScreenState extends State<UserSearchScreen>
                     Icon(
                       Icons.people_outline,
                       size: 64,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withOpacity(0.4),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.4),
                     ),
                     const SizedBox(height: 16),
                     Text(
@@ -1080,10 +1084,9 @@ class _UserSearchScreenState extends State<UserSearchScreen>
                       'Search for users to follow and connect with',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withOpacity(0.6),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacity(0.6),
                       ),
                     ),
                   ],
@@ -1123,10 +1126,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
             color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
           ),
           const SizedBox(height: 16),
-          Text(
-            'Search Posts',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          Text('Search Posts', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 32),
@@ -1168,10 +1168,7 @@ class _UserSearchScreenState extends State<UserSearchScreen>
             color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
           ),
           const SizedBox(height: 16),
-          Text(
-            'Search Movies',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          Text('Search Movies', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 32),
@@ -1213,17 +1210,11 @@ class _UserSearchScreenState extends State<UserSearchScreen>
             color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4),
           ),
           const SizedBox(height: 16),
-          Text(
-            'Search Actors',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          Text('Search Actors', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              'Find actors by name',
-              textAlign: TextAlign.center,
-            ),
+            child: Text('Find actors by name', textAlign: TextAlign.center),
           ),
         ],
       ),
@@ -1243,21 +1234,22 @@ class _UserSearchScreenState extends State<UserSearchScreen>
             border: InputBorder.none,
             hintStyle: TextStyle(color: colorScheme.onSurface.withOpacity(0.6)),
             prefixIcon: const Icon(Icons.search),
-            suffixIcon: _searchController.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() {
-                        _userResults = [];
-                        _postResults = [];
-                        _movieResults = [];
-                        _actorResults = [];
-                        _currentQuery = '';
-                      });
-                    },
-                  )
-                : null,
+            suffixIcon:
+                _searchController.text.isNotEmpty
+                    ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {
+                          _userResults = [];
+                          _postResults = [];
+                          _movieResults = [];
+                          _actorResults = [];
+                          _currentQuery = '';
+                        });
+                      },
+                    )
+                    : null,
           ),
           onChanged: _performSearch,
           textInputAction: TextInputAction.search,
@@ -1266,22 +1258,10 @@ class _UserSearchScreenState extends State<UserSearchScreen>
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(
-              icon: Icon(Icons.person_outline),
-              text: 'Users',
-            ),
-            Tab(
-              icon: Icon(Icons.article_outlined),
-              text: 'Posts',
-            ),
-            Tab(
-              icon: Icon(Icons.movie_outlined),
-              text: 'Movies',
-            ),
-            Tab(
-              icon: Icon(Icons.person_search),
-              text: 'Actors',
-            ),
+            Tab(icon: Icon(Icons.person_outline), text: 'Users'),
+            Tab(icon: Icon(Icons.article_outlined), text: 'Posts'),
+            Tab(icon: Icon(Icons.movie_outlined), text: 'Movies'),
+            Tab(icon: Icon(Icons.person_search), text: 'Actors'),
           ],
         ),
       ),

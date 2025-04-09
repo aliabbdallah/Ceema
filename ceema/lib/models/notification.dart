@@ -1,11 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum NotificationType {
-  friendRequest,
-  friendAccepted,
+  follow,
+  followRequest,
+  followRequestAccepted,
   postLike,
   postComment,
-  systemNotice
+  systemNotice,
 }
 
 class Notification {

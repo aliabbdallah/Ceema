@@ -15,6 +15,7 @@ import '../../screens/user_search_screen.dart';
 import '../../screens/notifications_screen.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/profile_image_widget.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SeamlessFeedScreen extends StatefulWidget {
   const SeamlessFeedScreen({Key? key}) : super(key: key);
@@ -48,31 +49,19 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
   void initState() {
     super.initState();
     _checkUserPreferences();
-
-    // Add scroll listener to hide/show app bar
-    _scrollController.addListener(_onScroll);
+    debugPrint('Current User: ${_auth.currentUser?.displayName}');
+    debugPrint('Current User Email: ${_auth.currentUser?.email}');
+    debugPrint('Current User UID: ${_auth.currentUser?.uid}');
   }
 
   @override
   void dispose() {
-    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
 
   void _onScroll() {
-    // You can implement dynamic behaviors based on scroll position
-    // For example, hide trending section when scrolling down
-    if (_scrollController.position.pixels > 200 && _showTrendingMoviesSection) {
-      setState(() {
-        _showTrendingMoviesSection = false;
-      });
-    } else if (_scrollController.position.pixels <= 200 &&
-        !_showTrendingMoviesSection) {
-      setState(() {
-        _showTrendingMoviesSection = true;
-      });
-    }
+    // Removed scroll-based visibility toggle
   }
 
   Future<void> _checkUserPreferences() async {
@@ -102,54 +91,55 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.9,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(28),
-            topRight: Radius.circular(28),
-          ),
-        ),
-        child: Column(
-          children: [
-            // Drag indicator
-            Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 8),
-              height: 4,
-              width: 40,
-              decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(2),
+      builder:
+          (context) => Container(
+            height: MediaQuery.of(context).size.height * 0.9,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(28),
+                topRight: Radius.circular(28),
               ),
             ),
-
-            // Compose UI would go here
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Create Post',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 16),
-                    // This is just a placeholder - your actual compose section would go here
-                    Expanded(
-                      child: ComposePostSection(
-                        onCancel: () => Navigator.pop(context),
-                        maxHeight: MediaQuery.of(context).size.height * 0.8,
-                      ),
-                    ),
-                  ],
+            child: Column(
+              children: [
+                // Drag indicator
+                Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-              ),
+
+                // Compose UI would go here
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Create Post',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 16),
+                        // This is just a placeholder - your actual compose section would go here
+                        Expanded(
+                          child: ComposePostSection(
+                            onCancel: () => Navigator.pop(context),
+                            maxHeight: MediaQuery.of(context).size.height * 0.8,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
     );
   }
 
@@ -175,7 +165,32 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
                 ProfileImageWidget(
                   imageUrl: _auth.currentUser?.photoURL,
                   radius: 20,
-                  fallbackName: _auth.currentUser?.displayName ?? "User",
+                  fallbackName:
+                      _auth.currentUser?.displayName?.split(' ').first ??
+                      _auth.currentUser?.email?.split('@').first ??
+                      "User",
+                ),
+                const SizedBox(width: 12),
+                StreamBuilder<DocumentSnapshot>(
+                  stream:
+                      FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(_auth.currentUser?.uid)
+                          .snapshots(),
+                  builder: (context, snapshot) {
+                    final username = snapshot.data?.get('username') as String?;
+                    return Text(
+                      username ??
+                          _auth.currentUser?.displayName ??
+                          _auth.currentUser?.email?.split('@').first ??
+                          "User",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -202,8 +217,9 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
         ),
       ),
       style: ElevatedButton.styleFrom(
-        backgroundColor:
-            Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+        backgroundColor: Theme.of(
+          context,
+        ).colorScheme.surfaceVariant.withOpacity(0.3),
         elevation: 0,
         padding: const EdgeInsets.symmetric(vertical: 8),
         minimumSize: Size.zero,
@@ -226,19 +242,19 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
       child: Row(
         children: [
           _buildFilterTab(
+            label: 'All',
+            isSelected: _selectedFeedFilter == 'all',
+            onTap: () => setState(() => _selectedFeedFilter = 'all'),
+          ),
+          _buildFilterTab(
             label: 'For You',
             isSelected: _selectedFeedFilter == 'forYou',
             onTap: () => setState(() => _selectedFeedFilter = 'forYou'),
           ),
           _buildFilterTab(
-            label: 'Friends',
-            isSelected: _selectedFeedFilter == 'friends',
-            onTap: () => setState(() => _selectedFeedFilter = 'friends'),
-          ),
-          _buildFilterTab(
-            label: 'All',
-            isSelected: _selectedFeedFilter == 'all',
-            onTap: () => setState(() => _selectedFeedFilter = 'all'),
+            label: 'Following',
+            isSelected: _selectedFeedFilter == 'following',
+            onTap: () => setState(() => _selectedFeedFilter = 'following'),
           ),
         ],
       ),
@@ -258,9 +274,10 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: isSelected
-                    ? Theme.of(context).colorScheme.primary
-                    : Colors.transparent,
+                color:
+                    isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : Colors.transparent,
                 width: 2,
               ),
             ),
@@ -269,9 +286,10 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: isSelected
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
+              color:
+                  isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
             ),
           ),
@@ -351,48 +369,40 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
                               color: colorScheme.error,
                               shape: BoxShape.circle,
                             ),
-                            child: unreadCount > 9
-                                ? Text(
-                                    '9+',
-                                    style: TextStyle(
-                                      color: colorScheme.onError,
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  )
-                                : unreadCount > 1
+                            child:
+                                unreadCount > 9
                                     ? Text(
-                                        '$unreadCount',
-                                        style: TextStyle(
-                                          color: colorScheme.onError,
-                                          fontSize: 8,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      )
-                                    : Container(
-                                        width: 4,
-                                        height: 4,
-                                        decoration: BoxDecoration(
-                                          color: colorScheme.onError,
-                                          shape: BoxShape.circle,
-                                        ),
+                                      '9+',
+                                      style: TextStyle(
+                                        color: colorScheme.onError,
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
                                       ),
+                                    )
+                                    : unreadCount > 1
+                                    ? Text(
+                                      '$unreadCount',
+                                      style: TextStyle(
+                                        color: colorScheme.onError,
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    )
+                                    : Container(
+                                      width: 4,
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.onError,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
                           ),
                         );
                       },
                     ),
                   ],
                 ),
-                IconButton(
-                  icon: ProfileImageWidget(
-                    imageUrl: _auth.currentUser?.photoURL,
-                    radius: 14,
-                    fallbackName: _auth.currentUser?.displayName ?? "User",
-                  ),
-                  onPressed: () {
-                    // Navigate to profile
-                  },
-                ),
+                const SizedBox(width: 4),
               ],
             ),
 
@@ -406,34 +416,34 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
               ),
 
             // Feed filter tabs
-            SliverToBoxAdapter(
-              child: _buildFeedFilter(colorScheme),
-            ),
+            SliverToBoxAdapter(child: _buildFeedFilter(colorScheme)),
 
-            // Trending Movies
-            if (_showTrendingMoviesSection)
-              const SliverToBoxAdapter(
-                child: TrendingMoviesSection(),
-              ),
+            // Trending Movies - Only show in 'all' and 'forYou' tabs
+            if (_showTrendingMoviesSection &&
+                (_selectedFeedFilter == 'all' ||
+                    _selectedFeedFilter == 'forYou'))
+              const SliverToBoxAdapter(child: TrendingMoviesSection()),
 
             // Post Stream
             _selectedFeedFilter == 'forYou'
                 ? StreamBuilder<List<Post>>(
-                    stream: _recommendationService
-                        .getRecommendedPosts(limit: 20)
-                        .asStream(),
-                    builder: _buildPostStreamContent,
-                  )
-                : _selectedFeedFilter == 'friends'
-                    ? StreamBuilder<List<Post>>(
-                        stream: _postService
-                            .getFriendsPosts(_auth.currentUser!.uid),
-                        builder: _buildPostStreamContent,
-                      )
-                    : StreamBuilder<List<Post>>(
-                        stream: _postService.getPosts(),
-                        builder: _buildPostStreamContent,
-                      ),
+                  stream:
+                      _recommendationService
+                          .getRecommendedPosts(limit: 20)
+                          .asStream(),
+                  builder: _buildPostStreamContent,
+                )
+                : _selectedFeedFilter == 'following'
+                ? StreamBuilder<List<Post>>(
+                  stream: _postService.getFollowingPosts(
+                    _auth.currentUser!.uid,
+                  ),
+                  builder: _buildPostStreamContent,
+                )
+                : StreamBuilder<List<Post>>(
+                  stream: _postService.getPosts(),
+                  builder: _buildPostStreamContent,
+                ),
           ],
         ),
       ),
@@ -445,7 +455,9 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
   }
 
   Widget _buildPostStreamContent(
-      BuildContext context, AsyncSnapshot<List<Post>> snapshot) {
+    BuildContext context,
+    AsyncSnapshot<List<Post>> snapshot,
+  ) {
     if (snapshot.hasError) {
       return SliverToBoxAdapter(
         child: Padding(
@@ -478,11 +490,11 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
               ),
               const SizedBox(height: 16),
               Text(
-                _selectedFeedFilter == 'friends'
-                    ? 'No posts from friends'
+                _selectedFeedFilter == 'following'
+                    ? 'No posts from following'
                     : _selectedFeedFilter == 'forYou'
-                        ? 'No recommendations yet'
-                        : 'No posts yet',
+                    ? 'No recommendations yet'
+                    : 'No posts yet',
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -512,9 +524,10 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
           return SeamlessPostCard(
             post: snapshot.data![index],
             // Apply relevance reason for recommended content
-            relevanceReason: _selectedFeedFilter == 'forYou'
-                ? 'Recommended based on your preferences'
-                : null,
+            relevanceReason:
+                _selectedFeedFilter == 'forYou'
+                    ? 'Recommended based on your preferences'
+                    : null,
           );
         },
         childCount: snapshot.data!.length + 1, // +1 for bottom padding

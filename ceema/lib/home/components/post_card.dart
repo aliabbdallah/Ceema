@@ -13,10 +13,7 @@ import '../../widgets/profile_image_widget.dart';
 class PostCard extends StatefulWidget {
   final Post post;
 
-  const PostCard({
-    Key? key,
-    required this.post,
-  }) : super(key: key);
+  const PostCard({Key? key, required this.post}) : super(key: key);
 
   @override
   State<PostCard> createState() => _PostCardState();
@@ -40,14 +37,42 @@ class _PostCardState extends State<PostCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ListTile(
-            leading: ProfileImageWidget(
-              imageUrl: widget.post.userAvatar,
-              radius: 20,
-              fallbackName: widget.post.userName,
+            leading: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => UserProfileScreen(
+                          userId: widget.post.userId,
+                          username: widget.post.userName,
+                        ),
+                  ),
+                );
+              },
+              child: ProfileImageWidget(
+                imageUrl: widget.post.userAvatar,
+                radius: 20,
+                fallbackName: widget.post.userName,
+              ),
             ),
-            title: Text(
-              widget.post.userName,
-              style: Theme.of(context).textTheme.titleMedium,
+            title: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => UserProfileScreen(
+                          userId: widget.post.userId,
+                          username: widget.post.userName,
+                        ),
+                  ),
+                );
+              },
+              child: Text(
+                widget.post.userName,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ),
             subtitle: Text(timeago.format(widget.post.createdAt)),
           ),
@@ -70,13 +95,17 @@ class _PostCardState extends State<PostCard> {
               Text('${widget.post.likesCount}'),
               IconButton(
                 icon: Icon(Icons.comment),
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => CommentsScreen(post: widget.post),
+                    ),
+                  );
+                },
               ),
               Text('${widget.post.commentCount}'),
-              IconButton(
-                icon: Icon(Icons.more_vert),
-                onPressed: () {},
-              ),
+              IconButton(icon: Icon(Icons.more_vert), onPressed: () {}),
             ],
           ),
         ],
@@ -136,69 +165,125 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
 
     showModalBottomSheet(
       context: context,
-      builder: (context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isCurrentUser) ...[
-            ListTile(
-              leading: const Icon(Icons.edit),
-              title: const Text('Edit Post'),
-              onTap: () {
-                // TODO: Implement edit functionality
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete, color: Colors.red),
-              title: const Text('Delete Post',
-                  style: TextStyle(color: Colors.red)),
-              onTap: () async {
-                Navigator.pop(context);
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('Delete Post'),
-                    content: const Text(
-                        'Are you sure you want to delete this post?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Delete',
-                            style: TextStyle(color: Colors.red)),
-                      ),
-                    ],
+      builder:
+          (context) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isCurrentUser) ...[
+                ListTile(
+                  leading: const Icon(Icons.edit),
+                  title: const Text('Edit Post'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    final controller = TextEditingController(
+                      text: widget.post.content,
+                    );
+                    showDialog(
+                      context: context,
+                      builder:
+                          (context) => AlertDialog(
+                            title: const Text('Edit Post'),
+                            content: TextField(
+                              controller: controller,
+                              maxLines: 3,
+                              decoration: const InputDecoration(
+                                hintText: 'Edit your post...',
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Cancel'),
+                              ),
+                              TextButton(
+                                onPressed: () async {
+                                  try {
+                                    await _postService.updatePostContent(
+                                      widget.post.id,
+                                      controller.text,
+                                    );
+                                    if (mounted) {
+                                      Navigator.pop(context);
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Post updated successfully',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Error updating post: $e',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                                child: const Text('Save'),
+                              ),
+                            ],
+                          ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: const Text(
+                    'Delete Post',
+                    style: TextStyle(color: Colors.red),
                   ),
-                );
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder:
+                          (context) => AlertDialog(
+                            title: const Text('Delete Post'),
+                            content: const Text(
+                              'Are you sure you want to delete this post?',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancel'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text(
+                                  'Delete',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ),
+                            ],
+                          ),
+                    );
 
-                if (confirmed == true && mounted) {
-                  try {
-                    await _postService.deletePost(widget.post.id);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Post deleted')),
-                    );
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error deleting post: $e')),
-                    );
-                  }
-                }
-              },
-            ),
-          ],
-          ListTile(
-            leading: const Icon(Icons.report),
-            title: const Text('Report Post'),
-            onTap: () {
-              // TODO: Implement report functionality
-              Navigator.pop(context);
-            },
+                    if (confirmed == true && mounted) {
+                      try {
+                        await _postService.deletePost(widget.post.id);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Post deleted')),
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error deleting post: $e')),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ],
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -220,19 +305,47 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
               // User info row
               Row(
                 children: [
-                  ProfileImageWidget(
-                    imageUrl: widget.post.userAvatar,
-                    radius: 20,
-                    fallbackName: widget.post.userName,
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (context) => UserProfileScreen(
+                                userId: widget.post.userId,
+                                username: widget.post.userName,
+                              ),
+                        ),
+                      );
+                    },
+                    child: ProfileImageWidget(
+                      imageUrl: widget.post.userAvatar,
+                      radius: 20,
+                      fallbackName: widget.post.userName,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          widget.post.userName,
-                          style: Theme.of(context).textTheme.titleMedium,
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => UserProfileScreen(
+                                      userId: widget.post.userId,
+                                      username: widget.post.userName,
+                                    ),
+                              ),
+                            );
+                          },
+                          child: Text(
+                            widget.post.userName,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
                         ),
                         Text(
                           timeago.format(widget.post.createdAt),
@@ -313,22 +426,24 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
                   ),
                   Text(
                     widget.post.likes.length.toString(),
-                    style: TextStyle(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(width: 16),
                   IconButton(
                     icon: const Icon(Icons.comment),
                     onPressed: () {
-                      // TODO: Implement comment navigation
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (context) => CommentsScreen(post: widget.post),
+                        ),
+                      );
                     },
                   ),
                   Text(
                     widget.post.commentCount.toString(),
-                    style: TextStyle(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
                   ),
                 ],
               ),

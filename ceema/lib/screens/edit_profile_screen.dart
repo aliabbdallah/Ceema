@@ -3,6 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import '../models/podium_movie.dart';
+import '../services/podium_service.dart';
+import '../widgets/podium_widget.dart';
 import 'dart:io';
 
 class EditProfileScreen extends StatefulWidget {
@@ -19,11 +22,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
+  final _podiumService = PodiumService();
 
   bool _isLoading = false;
   bool _isImageLoading = false;
   String? _currentProfileUrl;
   File? _selectedImageFile;
+  List<PodiumMovie> _podiumMovies = [];
 
   // Avatar selection variables
   final List<String> _presetAvatars = [
@@ -40,6 +45,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void initState() {
     super.initState();
     _loadUserData();
+    _loadPodiumMovies();
   }
 
   @override
@@ -86,6 +92,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _loadPodiumMovies() async {
+    try {
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) return;
+
+      final podiumMovies = await _podiumService.getPodiumMovies(userId).first;
+      setState(() {
+        _podiumMovies = podiumMovies;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading podium movies: $e')),
+        );
+      }
     }
   }
 
@@ -246,236 +270,288 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // Profile Avatar Section
-                    Stack(
-                      children: [
-                        Container(
-                          width: 120,
-                          height: 120,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[200],
-                            shape: BoxShape.circle,
-                            image: _selectedImageFile != null
-                                ? DecorationImage(
-                                    image: FileImage(_selectedImageFile!),
-                                    fit: BoxFit.cover,
-                                  )
-                                : _selectedPresetAvatar != null
-                                    ? DecorationImage(
-                                        image:
-                                            AssetImage(_selectedPresetAvatar!),
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                padding: const EdgeInsets.all(24.0),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Profile Avatar Section
+                      Stack(
+                        children: [
+                          Container(
+                            width: 120,
+                            height: 120,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[200],
+                              shape: BoxShape.circle,
+                              image:
+                                  _selectedImageFile != null
+                                      ? DecorationImage(
+                                        image: FileImage(_selectedImageFile!),
                                         fit: BoxFit.cover,
                                       )
-                                    : _currentProfileUrl != null &&
-                                            _currentProfileUrl!
-                                                .startsWith('http')
-                                        ? DecorationImage(
-                                            image: NetworkImage(
-                                                _currentProfileUrl!),
-                                            fit: BoxFit.cover,
-                                          )
-                                        : null,
-                          ),
-                          child: (_selectedImageFile == null &&
-                                  _selectedPresetAvatar == null &&
-                                  (_currentProfileUrl == null ||
-                                      _currentProfileUrl!.isEmpty))
-                              ? const Icon(
-                                  Icons.person,
-                                  size: 60,
-                                  color: Colors.grey,
-                                )
-                              : null,
-                        ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).primaryColor,
-                              shape: BoxShape.circle,
+                                      : _selectedPresetAvatar != null
+                                      ? DecorationImage(
+                                        image: AssetImage(
+                                          _selectedPresetAvatar!,
+                                        ),
+                                        fit: BoxFit.cover,
+                                      )
+                                      : _currentProfileUrl != null &&
+                                          _currentProfileUrl!.startsWith('http')
+                                      ? DecorationImage(
+                                        image: NetworkImage(
+                                          _currentProfileUrl!,
+                                        ),
+                                        fit: BoxFit.cover,
+                                      )
+                                      : null,
                             ),
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.camera_alt,
-                                size: 20,
-                                color: Colors.white,
+                            child:
+                                (_selectedImageFile == null &&
+                                        _selectedPresetAvatar == null &&
+                                        (_currentProfileUrl == null ||
+                                            _currentProfileUrl!.isEmpty))
+                                    ? const Icon(
+                                      Icons.person,
+                                      size: 60,
+                                      color: Colors.grey,
+                                    )
+                                    : null,
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).primaryColor,
+                                shape: BoxShape.circle,
                               ),
-                              onPressed: () {
-                                showModalBottomSheet(
-                                  context: context,
-                                  builder: (context) => Container(
-                                    padding: const EdgeInsets.all(16.0),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        ListTile(
-                                          leading:
-                                              const Icon(Icons.photo_library),
-                                          title:
-                                              const Text('Choose from Gallery'),
-                                          onTap: () {
-                                            Navigator.pop(context);
-                                            _pickImage();
-                                          },
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.camera_alt,
+                                  size: 20,
+                                  color: Colors.white,
+                                ),
+                                onPressed: () {
+                                  showModalBottomSheet(
+                                    context: context,
+                                    builder:
+                                        (context) => Container(
+                                          padding: const EdgeInsets.all(16.0),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              ListTile(
+                                                leading: const Icon(
+                                                  Icons.photo_library,
+                                                ),
+                                                title: const Text(
+                                                  'Choose from Gallery',
+                                                ),
+                                                onTap: () {
+                                                  Navigator.pop(context);
+                                                  _pickImage();
+                                                },
+                                              ),
+                                              ListTile(
+                                                leading: const Icon(
+                                                  Icons.camera_alt,
+                                                ),
+                                                title: const Text(
+                                                  'Take a Photo',
+                                                ),
+                                                onTap: () {
+                                                  Navigator.pop(context);
+                                                  _takePhoto();
+                                                },
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                        ListTile(
-                                          leading: const Icon(Icons.camera_alt),
-                                          title: const Text('Take a Photo'),
-                                          onTap: () {
-                                            Navigator.pop(context);
-                                            _takePhoto();
-                                          },
-                                        ),
-                                      ],
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                          if (_isImageLoading)
+                            Positioned.fill(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.5),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
                                     ),
                                   ),
-                                );
-                              },
+                                ),
+                              ),
                             ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Change your avatar',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+
+                      // Preset Avatars
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 80,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _presetAvatars.length,
+                          itemBuilder: (context, index) {
+                            final avatar = _presetAvatars[index];
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedPresetAvatar = avatar;
+                                  _selectedImageFile = null;
+                                });
+                              },
+                              child: Container(
+                                width: 60,
+                                height: 60,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border:
+                                      _selectedPresetAvatar == avatar
+                                          ? Border.all(
+                                            color:
+                                                Theme.of(context).primaryColor,
+                                            width: 3,
+                                          )
+                                          : null,
+                                  image: DecorationImage(
+                                    image: AssetImage(avatar),
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(height: 32),
+                      const Divider(),
+                      const SizedBox(height: 16),
+
+                      // Podium Section
+                      const Text(
+                        'Your Top 3 Movies',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      if (_podiumMovies.isNotEmpty)
+                        PodiumWidget(
+                          movies: _podiumMovies,
+                          isEditable: true,
+                          onRankTap: (rank) {
+                            // TODO: Navigate to podium edit screen
+                          },
+                          onMovieTap: (movie) {
+                            // TODO: Navigate to movie details
+                          },
+                        )
+                      else
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.add),
+                          label: const Text('Create Your Podium'),
+                          onPressed: () {
+                            // TODO: Navigate to podium edit screen
+                          },
+                        ),
+                      const SizedBox(height: 32),
+
+                      // Username field
+                      TextFormField(
+                        controller: _usernameController,
+                        decoration: InputDecoration(
+                          labelText: 'Username',
+                          prefixIcon: const Icon(Icons.alternate_email),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        if (_isImageLoading)
-                          Positioned.fill(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.5),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Center(
-                                child: CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Change your avatar',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-
-                    // Preset Avatars
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 80,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _presetAvatars.length,
-                        itemBuilder: (context, index) {
-                          final avatar = _presetAvatars[index];
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _selectedPresetAvatar = avatar;
-                                _selectedImageFile = null;
-                              });
-                            },
-                            child: Container(
-                              width: 60,
-                              height: 60,
-                              margin: const EdgeInsets.symmetric(horizontal: 8),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: _selectedPresetAvatar == avatar
-                                    ? Border.all(
-                                        color: Theme.of(context).primaryColor,
-                                        width: 3,
-                                      )
-                                    : null,
-                                image: DecorationImage(
-                                  image: AssetImage(avatar),
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                          );
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter a username';
+                          }
+                          if (value.contains(' ')) {
+                            return 'Username cannot contain spaces';
+                          }
+                          return null;
                         },
                       ),
-                    ),
+                      const SizedBox(height: 16),
 
-                    const SizedBox(height: 32),
-
-                    // Username field
-                    TextFormField(
-                      controller: _usernameController,
-                      decoration: InputDecoration(
-                        labelText: 'Username',
-                        prefixIcon: const Icon(Icons.alternate_email),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      // Bio field
+                      TextFormField(
+                        controller: _bioController,
+                        decoration: InputDecoration(
+                          labelText: 'Bio',
+                          prefixIcon: const Icon(Icons.edit),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
+                        maxLines: 3,
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter a username';
-                        }
-                        if (value.contains(' ')) {
-                          return 'Username cannot contain spaces';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 24),
 
-                    // Bio field
-                    TextFormField(
-                      controller: _bioController,
-                      decoration: InputDecoration(
-                        labelText: 'Bio',
-                        prefixIcon: const Icon(Icons.edit),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      // Save button
+                      ElevatedButton(
+                        onPressed:
+                            _isLoading || _isImageLoading ? null : _saveProfile,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 48,
+                            vertical: 16,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
+                        child:
+                            _isLoading || _isImageLoading
+                                ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                                : const Text(
+                                  'Save Changes',
+                                  style: TextStyle(fontSize: 16),
+                                ),
                       ),
-                      maxLines: 3,
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Save button
-                    ElevatedButton(
-                      onPressed:
-                          _isLoading || _isImageLoading ? null : _saveProfile,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 48, vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading || _isImageLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Text(
-                              'Save Changes',
-                              style: TextStyle(fontSize: 16),
-                            ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
     );
   }
 }
