@@ -4,6 +4,7 @@ class Post {
   final String id;
   final String userId;
   final String userName;
+  final String displayName;
   final String userAvatar;
   final String content;
   final String movieId;
@@ -18,10 +19,13 @@ class Post {
 
   int get likesCount => likes.length;
 
+  String get formattedUsername => '@${userName.toLowerCase()}';
+
   Post({
     required this.id,
     required this.userId,
     required this.userName,
+    required this.displayName,
     required this.userAvatar,
     required this.content,
     required this.movieId,
@@ -39,6 +43,7 @@ class Post {
     return {
       'userId': userId,
       'username': userName,
+      'displayName': displayName,
       'profileImageUrl': userAvatar,
       'content': content,
       'movieId': movieId,
@@ -65,6 +70,7 @@ class Post {
       id: documentId,
       userId: json['userId'] ?? '',
       userName: json['username'] ?? json['userName'] ?? '',
+      displayName: json['displayName'] ?? json['name'] ?? '',
       userAvatar: json['profileImageUrl'] ?? json['userAvatar'] ?? '',
       content: json['content'] ?? '',
       movieId: json['movieId'] ?? '',

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/post_service.dart';
 import '../services/post_recommendation_service.dart';
 import '../models/post.dart';
 import '../widgets/loading_indicator.dart';
-import '../home/components/post_card.dart'; // Correct path
+import '../home/components/post_card.dart';
 
 class PostRecommendationsScreen extends StatefulWidget {
   const PostRecommendationsScreen({Key? key}) : super(key: key);
@@ -50,21 +52,24 @@ class _PostRecommendationsScreenState extends State<PostRecommendationsScreen>
       _personalizedError = null;
     });
 
-    _recommendationService.getRecommendedPosts().then((posts) {
-      if (mounted) {
-        setState(() {
-          _personalizedPosts = posts;
-          _isLoadingPersonalized = false;
+    _recommendationService
+        .getRecommendedPosts()
+        .then((posts) {
+          if (mounted) {
+            setState(() {
+              _personalizedPosts = posts;
+              _isLoadingPersonalized = false;
+            });
+          }
+        })
+        .catchError((error) {
+          if (mounted) {
+            setState(() {
+              _personalizedError = error.toString();
+              _isLoadingPersonalized = false;
+            });
+          }
         });
-      }
-    }).catchError((error) {
-      if (mounted) {
-        setState(() {
-          _personalizedError = error.toString();
-          _isLoadingPersonalized = false;
-        });
-      }
-    });
 
     // Load trending posts
     setState(() {
@@ -72,21 +77,24 @@ class _PostRecommendationsScreenState extends State<PostRecommendationsScreen>
       _trendingError = null;
     });
 
-    _recommendationService.getTrendingPosts().then((posts) {
-      if (mounted) {
-        setState(() {
-          _trendingPosts = posts;
-          _isLoadingTrending = false;
+    _recommendationService
+        .getTrendingPosts()
+        .then((posts) {
+          if (mounted) {
+            setState(() {
+              _trendingPosts = posts;
+              _isLoadingTrending = false;
+            });
+          }
+        })
+        .catchError((error) {
+          if (mounted) {
+            setState(() {
+              _trendingError = error.toString();
+              _isLoadingTrending = false;
+            });
+          }
         });
-      }
-    }).catchError((error) {
-      if (mounted) {
-        setState(() {
-          _trendingError = error.toString();
-          _isLoadingTrending = false;
-        });
-      }
-    });
 
     // Load friend posts
     setState(() {
@@ -94,21 +102,24 @@ class _PostRecommendationsScreenState extends State<PostRecommendationsScreen>
       _friendsError = null;
     });
 
-    _recommendationService.getFriendsPosts().then((posts) {
-      if (mounted) {
-        setState(() {
-          _friendPosts = posts;
-          _isLoadingFriends = false;
+    _recommendationService
+        .getFriendsPosts()
+        .then((posts) {
+          if (mounted) {
+            setState(() {
+              _friendPosts = posts;
+              _isLoadingFriends = false;
+            });
+          }
+        })
+        .catchError((error) {
+          if (mounted) {
+            setState(() {
+              _friendsError = error.toString();
+              _isLoadingFriends = false;
+            });
+          }
         });
-      }
-    }).catchError((error) {
-      if (mounted) {
-        setState(() {
-          _friendsError = error.toString();
-          _isLoadingFriends = false;
-        });
-      }
-    });
   }
 
   Widget _buildPostList(
@@ -144,8 +155,11 @@ class _PostRecommendationsScreenState extends State<PostRecommendationsScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.movie_filter_outlined,
-                size: 64, color: Colors.grey[300]),
+            Icon(
+              Icons.movie_filter_outlined,
+              size: 64,
+              color: Colors.grey[300],
+            ),
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -174,7 +188,7 @@ class _PostRecommendationsScreenState extends State<PostRecommendationsScreen>
           );
         }
 
-        return PostCard(post: post);
+        return SeamlessPostCard(post: post);
       },
     );
   }

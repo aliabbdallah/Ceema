@@ -218,16 +218,39 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     try {
       final String userId = _auth.currentUser!.uid;
+      final String newUsername = _usernameController.text.trim();
+
+      // Get the current user data to check if username changed
+      final currentUserDoc =
+          await _firestore.collection('users').doc(userId).get();
+      final currentUsername = currentUserDoc.data()?['username'] ?? '';
 
       // Upload the profile image if one was selected
       final String? profileImageUrl = await _uploadImageToStorage();
 
       // Update the user document
       await _firestore.collection('users').doc(userId).update({
-        'username': _usernameController.text.trim(),
+        'username': newUsername,
         'bio': _bioController.text.trim(),
         'profileImageUrl': profileImageUrl,
       });
+
+      // If username changed, update all posts by this user
+      if (currentUsername != newUsername) {
+        // Get all posts by this user
+        final postsSnapshot =
+            await _firestore
+                .collection('posts')
+                .where('userId', isEqualTo: userId)
+                .get();
+
+        // Update each post with the new username
+        final batch = _firestore.batch();
+        for (var doc in postsSnapshot.docs) {
+          batch.update(doc.reference, {'username': newUsername});
+        }
+        await batch.commit();
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

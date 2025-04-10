@@ -467,16 +467,48 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
       );
     }
 
-    if (!snapshot.hasData) {
-      return const SliverToBoxAdapter(
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return SliverToBoxAdapter(
         child: Padding(
-          padding: EdgeInsets.all(32.0),
-          child: Center(child: CircularProgressIndicator()),
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_selectedFeedFilter == 'forYou') ...[
+                Icon(
+                  Icons.local_fire_department,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Personalizing your feed',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'We\'re finding the best content for you',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
+              CircularProgressIndicator(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ],
+          ),
         ),
       );
     }
 
-    if (snapshot.data!.isEmpty) {
+    if (!snapshot.hasData || snapshot.data!.isEmpty) {
       return SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.all(32.0),

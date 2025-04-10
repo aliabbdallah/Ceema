@@ -57,11 +57,11 @@ class _TrendingMoviesScreenState extends State<TrendingMoviesScreen> {
 
   Widget _buildMovieGrid() {
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.7,
-        crossAxisSpacing: 16,
+        crossAxisCount: 3,
+        childAspectRatio: 0.60,
+        crossAxisSpacing: 8,
         mainAxisSpacing: 16,
       ),
       itemCount: _trendingMovies.length,
@@ -76,62 +76,60 @@ class _TrendingMoviesScreenState extends State<TrendingMoviesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      movie.posterUrl,
-                      height: 200,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(
-                          height: 200,
-                          width: double.infinity,
-                          color: Theme.of(context).colorScheme.surfaceVariant,
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              value:
-                                  loadingProgress.expectedTotalBytes != null
-                                      ? loadingProgress.cumulativeBytesLoaded /
-                                          loadingProgress.expectedTotalBytes!
-                                      : null,
-                              strokeWidth: 2,
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        movie.posterUrl,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            color: Theme.of(context).colorScheme.surfaceVariant,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                value:
+                                    loadingProgress.expectedTotalBytes != null
+                                        ? loadingProgress
+                                                .cumulativeBytesLoaded /
+                                            loadingProgress.expectedTotalBytes!
+                                        : null,
+                                strokeWidth: 2,
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          height: 200,
-                          width: double.infinity,
-                          color: Theme.of(context).colorScheme.surfaceVariant,
-                          child: const Center(
-                            child: Icon(
-                              Icons.movie,
-                              size: 40,
-                              color: Colors.white70,
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            color: Theme.of(context).colorScheme.surfaceVariant,
+                            child: const Center(
+                              child: Icon(
+                                Icons.movie,
+                                size: 40,
+                                color: Colors.white70,
+                              ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    movie.title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
                   Text(
+                    movie.title,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
                     movie.year,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 10,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),

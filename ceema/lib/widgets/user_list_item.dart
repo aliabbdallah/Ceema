@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../widgets/follow_button.dart';
+import '../screens/user_profile_screen.dart';
 
 class UserListItem extends StatelessWidget {
   final String userId;
@@ -34,13 +35,14 @@ class UserListItem extends StatelessWidget {
               ? FollowButton(targetUserId: userId, isPrivate: isPrivate)
               : null,
       onTap: () {
-        // TODO: Navigate to user profile
-        // Navigator.push(
-        //   context,
-        //   MaterialPageRoute(
-        //     builder: (context) => ProfileScreen(userId: userId),
-        //   ),
-        // );
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder:
+                (context) =>
+                    UserProfileScreen(userId: userId, username: userName),
+          ),
+        );
       },
     );
   }

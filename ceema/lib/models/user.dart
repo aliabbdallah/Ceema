@@ -5,6 +5,7 @@ class UserModel {
   final String id;
   final String username;
   final String email;
+  final String? displayName;
   final String? bio;
   final String? profileImageUrl;
   final List<String> favoriteGenres;
@@ -21,6 +22,7 @@ class UserModel {
     required this.id,
     required this.username,
     required this.email,
+    this.displayName,
     this.bio,
     this.profileImageUrl,
     required this.favoriteGenres,
@@ -39,6 +41,7 @@ class UserModel {
       id: documentId,
       username: json['username'] ?? '',
       email: json['email'] ?? '',
+      displayName: json['displayName'],
       bio: json['bio'],
       profileImageUrl: json['profileImageUrl'],
       favoriteGenres: List<String>.from(json['favoriteGenres'] ?? []),
@@ -61,6 +64,7 @@ class UserModel {
     return {
       'username': username,
       'email': email,
+      'displayName': displayName,
       'bio': bio,
       'profileImageUrl': profileImageUrl,
       'favoriteGenres': favoriteGenres,
@@ -78,6 +82,7 @@ class UserModel {
   UserModel copyWith({
     String? username,
     String? email,
+    String? displayName,
     String? bio,
     String? profileImageUrl,
     List<String>? favoriteGenres,
@@ -94,6 +99,7 @@ class UserModel {
       id: id,
       username: username ?? this.username,
       email: email ?? this.email,
+      displayName: displayName ?? this.displayName,
       bio: bio ?? this.bio,
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       favoriteGenres: favoriteGenres ?? this.favoriteGenres,

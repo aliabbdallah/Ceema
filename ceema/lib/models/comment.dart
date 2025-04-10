@@ -9,6 +9,8 @@ class Comment {
   final String content;
   final DateTime createdAt;
   final List<String> likes;
+  final String? parentCommentId; // ID of the parent comment if this is a reply
+  final int replyCount; // Number of replies to this comment
 
   Comment({
     required this.id,
@@ -19,6 +21,8 @@ class Comment {
     required this.content,
     required this.createdAt,
     required this.likes,
+    this.parentCommentId,
+    this.replyCount = 0,
   });
 
   Map<String, dynamic> toJson() {
@@ -30,6 +34,8 @@ class Comment {
       'content': content,
       'createdAt': Timestamp.fromDate(createdAt),
       'likes': likes,
+      'parentCommentId': parentCommentId,
+      'replyCount': replyCount,
     };
   }
 
@@ -43,6 +49,8 @@ class Comment {
       content: json['content'] ?? '',
       createdAt: (json['createdAt'] as Timestamp).toDate(),
       likes: List<String>.from(json['likes'] ?? []),
+      parentCommentId: json['parentCommentId'],
+      replyCount: json['replyCount'] ?? 0,
     );
   }
 }

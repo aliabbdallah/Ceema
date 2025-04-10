@@ -36,17 +36,7 @@ class PodiumService {
       throw Exception('Invalid rank. Must be between 1 and 3.');
     }
 
-    // Check if rank is already taken
-    final existingMovie = currentPodiumMovies.firstWhere(
-      (m) => m.rank == movie.rank,
-      orElse: () => movie,
-    );
-    if (existingMovie.rank == movie.rank &&
-        existingMovie.tmdbId != movie.tmdbId) {
-      throw Exception('Rank ${movie.rank} is already taken by another movie.');
-    }
-
-    // Update or add the movie
+    // Remove any existing movie with the same rank and add the new one
     final updatedPodiumMovies =
         currentPodiumMovies.where((m) => m.rank != movie.rank).toList()
           ..add(movie);

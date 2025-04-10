@@ -3,7 +3,6 @@ import '../components/feed_screen.dart';
 import 'package:ceema/screens/diary_screen.dart';
 import 'package:ceema/screens/profile_screen.dart';
 import 'package:ceema/screens/watchlist_screen.dart';
-import 'package:ceema/services/automatic_preference_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -20,8 +19,6 @@ class _HomeScreenState extends State<HomeScreen>
   late Animation<double> _fadeAnimation;
   int _currentTab = 0;
   bool _isPageChanging = false;
-  final AutomaticPreferenceService _automaticPreferenceService =
-      AutomaticPreferenceService();
   bool _isInitializing = true;
   final _auth = FirebaseAuth.instance;
 
@@ -37,24 +34,11 @@ class _HomeScreenState extends State<HomeScreen>
     );
     _animationController.forward();
 
-    // Initialize user preferences automatically on app start
-    _initializePreferences();
-  }
-
-  Future<void> _initializePreferences() async {
-    try {
-      // Generate preferences based on user's diary entries
-      await _automaticPreferenceService.generateAutomaticPreferences();
-    } catch (e) {
-      print('Error initializing preferences: $e');
-      // Don't show error to user - just log it
-    } finally {
-      // Mark initialization as complete
-      if (mounted) {
-        setState(() {
-          _isInitializing = false;
-        });
-      }
+    // Mark initialization as complete
+    if (mounted) {
+      setState(() {
+        _isInitializing = false;
+      });
     }
   }
 

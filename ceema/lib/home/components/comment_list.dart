@@ -7,8 +7,10 @@ import '../../widgets/profile_image_widget.dart';
 
 class CommentList extends StatefulWidget {
   final String postId;
+  final bool isEmbedded;
 
-  const CommentList({Key? key, required this.postId}) : super(key: key);
+  const CommentList({Key? key, required this.postId, this.isEmbedded = false})
+    : super(key: key);
 
   @override
   State<CommentList> createState() => _CommentListState();
@@ -75,11 +77,103 @@ class _CommentListState extends State<CommentList> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isEmbedded) {
+      return SliverList(
+        delegate: SliverChildListDelegate([
+          StreamBuilder<List<dynamic>>(
+            stream: _postService.getComments(
+              widget.postId,
+              parentCommentId: null,
+            ),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              if (snapshot.hasError) {
+                return Center(
+                  child: Text(
+                    'Error loading comments: ${snapshot.error}',
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                );
+              }
+
+              final comments = snapshot.data ?? [];
+
+              if (comments.isEmpty) {
+                return const Center(
+                  child: Text('No comments yet. Be the first to comment!'),
+                );
+              }
+
+              return Column(
+                children:
+                    comments.map((comment) {
+                      return CommentCard(
+                        comment: comment,
+                        onDelete: () async {
+                          try {
+                            await _postService.deleteComment(
+                              comment['id'],
+                              widget.postId,
+                            );
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Comment deleted'),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error deleting comment: $e'),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      );
+                    }).toList(),
+              );
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _commentController,
+                    decoration: const InputDecoration(
+                      hintText: 'Write a comment...',
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.send),
+                  onPressed: _isSubmitting ? null : _submitComment,
+                ),
+              ],
+            ),
+          ),
+        ]),
+      );
+    }
+
     return Column(
       children: [
         Expanded(
           child: StreamBuilder<List<dynamic>>(
-            stream: _postService.getComments(widget.postId),
+            stream: _postService.getComments(
+              widget.postId,
+              parentCommentId: null,
+            ),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
@@ -108,8 +202,26 @@ class _CommentListState extends State<CommentList> {
                 itemBuilder: (context, index) {
                   return CommentCard(
                     comment: comments[index],
-                    onDelete: () {
-                      // This will trigger a rebuild via the stream
+                    onDelete: () async {
+                      try {
+                        await _postService.deleteComment(
+                          comments[index]['id'],
+                          widget.postId,
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Comment deleted')),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error deleting comment: $e'),
+                            ),
+                          );
+                        }
+                      }
                     },
                   );
                 },
@@ -117,46 +229,23 @@ class _CommentListState extends State<CommentList> {
             },
           ),
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 4,
-                offset: const Offset(0, -2),
-              ),
-            ],
-          ),
+        Padding(
+          padding: const EdgeInsets.all(16.0),
           child: Row(
             children: [
-              ProfileImageWidget(
-                imageUrl: _auth.currentUser?.photoURL,
-                radius: 16,
-                fallbackName: _auth.currentUser?.displayName ?? 'User',
-              ),
-              const SizedBox(width: 8),
               Expanded(
                 child: TextField(
                   controller: _commentController,
                   decoration: const InputDecoration(
                     hintText: 'Write a comment...',
-                    border: InputBorder.none,
+                    border: OutlineInputBorder(),
                   ),
-                  textCapitalization: TextCapitalization.sentences,
                   maxLines: null,
                 ),
               ),
+              const SizedBox(width: 8),
               IconButton(
-                icon:
-                    _isSubmitting
-                        ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                        : const Icon(Icons.send),
+                icon: const Icon(Icons.send),
                 onPressed: _isSubmitting ? null : _submitComment,
               ),
             ],

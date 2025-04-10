@@ -122,16 +122,58 @@ class _PodiumEditScreenState extends State<PodiumEditScreen> {
         rank: rank,
       );
 
+      // Check if there's already a movie in this rank
+      final existingMovies =
+          await _podiumService.getPodiumMovies(_auth.currentUser!.uid).first;
+      final existingMovie = existingMovies.firstWhere(
+        (m) => m.rank == rank,
+        orElse: () => podiumMovie,
+      );
+
+      // If there's an existing movie, show confirmation dialog
+      if (existingMovie.rank == rank && existingMovie.tmdbId != movie.id) {
+        final shouldReplace = await showDialog<bool>(
+          context: context,
+          builder:
+              (context) => AlertDialog(
+                title: const Text('Replace Movie?'),
+                content: Text(
+                  'Do you want to replace "${existingMovie.title}" with "${movie.title}" in position $rank?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Replace'),
+                  ),
+                ],
+              ),
+        );
+
+        if (shouldReplace != true) {
+          return;
+        }
+      }
+
       await _podiumService.updatePodiumMovie(podiumMovie);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Movie added to podium!'),
+          SnackBar(
+            content: Text(
+              existingMovie.rank == rank
+                  ? 'Movie replaced!'
+                  : 'Movie added to podium!',
+            ),
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context);
+        setState(() {
+          _selectedRank = null;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -295,17 +337,13 @@ class _PodiumEditScreenState extends State<PodiumEditScreen> {
     bool isOccupied,
   ) {
     final isSelected = _selectedRank == rank;
-    final isDisabled = isOccupied && !isSelected;
 
     return GestureDetector(
-      onTap:
-          isDisabled
-              ? null
-              : () {
-                setState(() {
-                  _selectedRank = rank;
-                });
-              },
+      onTap: () {
+        setState(() {
+          _selectedRank = rank;
+        });
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
@@ -431,28 +469,6 @@ class _PodiumEditScreenState extends State<PodiumEditScreen> {
                 });
               },
             ),
-            IconButton(
-              icon: const Icon(Icons.save),
-              onPressed: () async {
-                final podiumMovies =
-                    await _podiumService.getPodiumMovies(userId).first;
-                final hasAllMovies = podiumMovies.length == 3;
-
-                if (!hasAllMovies) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Please select all three movies before saving',
-                      ),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                  return;
-                }
-
-                Navigator.pop(context);
-              },
-            ),
           ],
         ),
         body: StreamBuilder<List<PodiumMovie>>(
@@ -467,90 +483,122 @@ class _PodiumEditScreenState extends State<PodiumEditScreen> {
             }
 
             final podiumMovies = snapshot.data!;
+            final hasAllMovies = podiumMovies.length == 3;
 
-            return Column(
-              children: [
-                // Current podium
-                PodiumWidget(
-                  movies: podiumMovies,
-                  isEditable: true,
-                  onRankTap: (rank) {
-                    setState(() {
-                      _selectedRank = rank;
-                    });
-                  },
-                  onMovieTap: (movie) => _showCommentDialog(movie),
-                  onRankSwap: (fromRank, toRank) => _handleDragAccept(toRank),
-                ),
-                const Divider(),
-                // Rank selector
-                _buildRankSelector(podiumMovies),
-                const Divider(),
-                // Search section
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _selectedRank != null
-                            ? 'Select a movie for rank $_selectedRank'
-                            : 'Select a rank first',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Search for a movie...',
-                          prefixIcon: const Icon(Icons.search),
-                          suffixIcon:
-                              _searchController.text.isNotEmpty
-                                  ? IconButton(
-                                    icon: const Icon(Icons.clear),
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      _searchMovies('');
-                                    },
-                                  )
-                                  : null,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onChanged: _searchMovies,
-                      ),
-                    ],
+            return SingleChildScrollView(
+              child: Column(
+                children: [
+                  // Current podium
+                  PodiumWidget(
+                    movies: podiumMovies,
+                    isEditable: true,
+                    onRankTap: (rank) {
+                      setState(() {
+                        _selectedRank = rank;
+                      });
+                    },
+                    onMovieTap: (movie) => _showCommentDialog(movie),
+                    onRankSwap: (fromRank, toRank) => _handleDragAccept(toRank),
                   ),
-                ),
-                // Content section
-                Expanded(
-                  child:
-                      _isSearching
-                          ? const Center(child: CircularProgressIndicator())
-                          : _searchController.text.isEmpty
-                          ? _isLoadingRecent
-                              ? const Center(child: CircularProgressIndicator())
-                              : _recentMovies.isEmpty
-                              ? const Center(
-                                child: Text('No recent movies found'),
-                              )
-                              : ListView.builder(
-                                itemCount: _recentMovies.length,
-                                itemBuilder:
-                                    (context, index) =>
-                                        _buildMovieCard(_recentMovies[index]),
-                              )
-                          : _searchResults.isEmpty
-                          ? const Center(child: Text('No movies found'))
-                          : ListView.builder(
-                            itemCount: _searchResults.length,
-                            itemBuilder:
-                                (context, index) =>
-                                    _buildMovieCard(_searchResults[index]),
+                  const Divider(),
+                  // Rank selector
+                  _buildRankSelector(podiumMovies),
+                  const Divider(),
+                  // Search section
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _selectedRank != null
+                              ? 'Select a movie for rank $_selectedRank'
+                              : 'Select a rank first',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: 'Search for a movie...',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon:
+                                _searchController.text.isNotEmpty
+                                    ? IconButton(
+                                      icon: const Icon(Icons.clear),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        _searchMovies('');
+                                      },
+                                    )
+                                    : null,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                ),
-              ],
+                          onChanged: _searchMovies,
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Content section
+                  SizedBox(
+                    height: 400, // Fixed height for the list
+                    child:
+                        _isSearching
+                            ? const Center(child: CircularProgressIndicator())
+                            : _searchController.text.isEmpty
+                            ? _isLoadingRecent
+                                ? const Center(
+                                  child: CircularProgressIndicator(),
+                                )
+                                : _recentMovies.isEmpty
+                                ? const Center(
+                                  child: Text('No recent movies found'),
+                                )
+                                : ListView.builder(
+                                  itemCount: _recentMovies.length,
+                                  itemBuilder:
+                                      (context, index) =>
+                                          _buildMovieCard(_recentMovies[index]),
+                                )
+                            : _searchResults.isEmpty
+                            ? const Center(child: Text('No movies found'))
+                            : ListView.builder(
+                              itemCount: _searchResults.length,
+                              itemBuilder:
+                                  (context, index) =>
+                                      _buildMovieCard(_searchResults[index]),
+                            ),
+                  ),
+                  // Save button
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: ElevatedButton(
+                      onPressed:
+                          hasAllMovies
+                              ? () {
+                                Navigator.pop(context);
+                              }
+                              : null,
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 50),
+                        backgroundColor:
+                            hasAllMovies ? Colors.green : Colors.grey,
+                      ),
+                      child: Text(
+                        hasAllMovies
+                            ? 'Save Podium'
+                            : 'Select all 3 movies to save',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             );
           },
         ),

@@ -310,7 +310,19 @@ class _DiaryScreenState extends State<DiaryScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Day number
-            Container(width: 40, alignment: Alignment.topCenter),
+            Container(
+              width: 40,
+              height: 90, // Match the height of the movie poster
+              alignment: Alignment.center,
+              child: Text(
+                DateFormat('d').format(entry.watchedDate),
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
             const SizedBox(width: 12),
             // Movie poster
             ClipRRect(

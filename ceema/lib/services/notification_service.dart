@@ -182,6 +182,56 @@ class NotificationService {
     );
   }
 
+  // Create a follow request sent notification
+  Future<void> createFollowRequestSentNotification({
+    required String recipientUserId,
+    required String senderUserId,
+    required String senderName,
+    required String senderPhotoUrl,
+  }) async {
+    await _createNotification(
+      userId: recipientUserId,
+      title: 'Follow Request Sent',
+      body: 'You requested to follow $senderName',
+      type: app_notification.NotificationType.followRequestSent,
+      senderUserId: senderUserId,
+      senderName: senderName,
+      senderPhotoUrl: senderPhotoUrl,
+    );
+  }
+
+  // Update notification when sent follow request is accepted
+  Future<void> updateFollowRequestSentToAccepted(String notificationId) async {
+    await _notificationsCollection.doc(notificationId).update({
+      'type': app_notification.NotificationType.followRequestSentAccepted.name,
+      'title': 'Follow Request Accepted',
+      'body': 'Your follow request was accepted',
+    });
+  }
+
+  // Create a comment reply notification
+  Future<void> createCommentReplyNotification({
+    required String recipientUserId,
+    required String senderUserId,
+    required String senderName,
+    String? senderPhotoUrl,
+    required String postId,
+    required String commentId,
+    required String replyText,
+  }) async {
+    await _createNotification(
+      userId: recipientUserId,
+      title: 'New Reply',
+      body:
+          '$senderName replied to your comment: ${replyText.length > 30 ? replyText.substring(0, 30) + '...' : replyText}',
+      type: app_notification.NotificationType.commentReply,
+      senderUserId: senderUserId,
+      senderName: senderName,
+      senderPhotoUrl: senderPhotoUrl,
+      referenceId: commentId,
+    );
+  }
+
   // Helper method to create notifications
   Future<void> _createNotification({
     required String userId,
@@ -227,5 +277,17 @@ class NotificationService {
     }
 
     await batch.commit();
+  }
+
+  // Update notification type
+  Future<void> updateNotificationType(
+    String notificationId,
+    app_notification.NotificationType newType,
+  ) async {
+    await _notificationsCollection.doc(notificationId).update({
+      'type': newType.name,
+      'title': 'Follow Request Accepted',
+      'body': 'You can now follow them back',
+    });
   }
 }

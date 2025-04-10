@@ -30,7 +30,6 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final WatchlistService _watchlistService = WatchlistService();
   final DiaryService _diaryService = DiaryService();
-  late ConfettiController _confettiController;
   late ScrollController _scrollController;
   late AnimationController _ratingAnimationController;
   late TabController _tabController;
@@ -59,9 +58,6 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
       vsync: this,
     );
     _tabController = TabController(length: 3, vsync: this);
-    _confettiController = ConfettiController(
-      duration: const Duration(seconds: 2),
-    );
     _scrollController = ScrollController();
 
     _loadMovieDetails();
@@ -74,7 +70,6 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
   void dispose() {
     _ratingAnimationController.dispose();
     _tabController.dispose();
-    _confettiController.dispose();
     _scrollController.dispose();
     for (var controller in _videoControllers) {
       controller.dispose();
@@ -621,32 +616,26 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
           ),
           const SizedBox(height: 12),
           Center(
-            child: Stack(
-              children: [
-                StarRating(
-                  rating: _userRating,
-                  size: 36,
-                  allowHalfRating: true,
-                  spacing: 8,
-                  onRatingChanged: (rating) {
-                    _saveRating(rating);
-                    _ratingAnimationController.forward(from: 0.0);
-                    _confettiController.play();
-                  },
-                ),
-                Align(
-                  alignment: Alignment.topCenter,
-                  child: ConfettiWidget(
-                    confettiController: _confettiController,
-                    blastDirection: math.pi / 2,
-                    maxBlastForce: 5,
-                    minBlastForce: 2,
-                    emissionFrequency: 0.05,
-                    numberOfParticles: 20,
-                    gravity: 0.1,
-                  ),
-                ),
-              ],
+            child: StarRating(
+              rating: _userRating,
+              size: 36,
+              allowHalfRating: true,
+              spacing: 8,
+              onRatingChanged: (rating) {
+                setState(() {
+                  _userRating = rating;
+                });
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: ElevatedButton(
+              onPressed: () {
+                _saveRating(_userRating);
+                _ratingAnimationController.forward(from: 0.0);
+              },
+              child: const Text('Save Rating'),
             ),
           ),
           if (_hasRated) ...[

@@ -14,9 +14,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Set preferred orientations
   await SystemChrome.setPreferredOrientations([
@@ -42,10 +40,9 @@ class MyApp extends StatelessWidget {
       await user.reload();
 
       // Update Firestore with the current verification status
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .update({'emailVerified': user.emailVerified});
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
+        {'emailVerified': user.emailVerified},
+      );
     } catch (e) {
       debugPrint('Error updating email verification status: $e');
     }
@@ -61,9 +58,10 @@ class MyApp extends StatelessWidget {
         statusBarColor: Colors.transparent,
         statusBarIconBrightness:
             themeService.isDarkMode ? Brightness.light : Brightness.dark,
-        systemNavigationBarColor: themeService.isDarkMode
-            ? const Color(0xFF1E1E22)
-            : const Color(0xFFF1F1F3),
+        systemNavigationBarColor:
+            themeService.isDarkMode
+                ? const Color(0xFF1E1E22)
+                : const Color(0xFFF1F1F3),
         systemNavigationBarIconBrightness:
             themeService.isDarkMode ? Brightness.light : Brightness.dark,
       ),

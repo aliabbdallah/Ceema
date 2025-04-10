@@ -148,7 +148,7 @@ class _TrendingMoviesSectionState extends State<TrendingMoviesSection>
                   ),
                   const SizedBox(width: 8),
                   const Text(
-                    '',
+                    'Trending Movies',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ],

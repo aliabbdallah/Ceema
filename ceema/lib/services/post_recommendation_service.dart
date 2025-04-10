@@ -16,84 +16,276 @@ class PostRecommendationService {
   final DiaryService _diaryService = DiaryService();
   final FollowService _followService = FollowService();
 
-  // Cache for movie data to avoid repeated queries
-  final Map<String, Map<String, dynamic>> _movieCache = {};
+  // Cache for movie data with expiration and size limit
+  final Map<String, _CachedMovieDetails> _movieCache = {};
+  static const Duration _cacheExpiration = Duration(hours: 24);
+  static const int _maxCacheSize = 1000; // Maximum number of cached movies
+
+  // Debug flag for logging
+  static const bool _debug = false;
 
   // Get recommended posts for the current user
   Future<List<Post>> getRecommendedPosts({int limit = 10}) async {
     try {
       final userId = _auth.currentUser?.uid;
       if (userId == null) {
-        print('[PostRecommendationService] Error: User not authenticated');
-        throw Exception('User not authenticated');
+        _log('Error: User not authenticated');
+        return _getFallbackRecommendations(limit);
       }
 
-      print(
-        '[PostRecommendationService] Getting recommended posts for user: $userId',
-      );
+      _log('Getting recommended posts for user: $userId');
 
-      // 1. Get user data needed for recommendations
-      print('[PostRecommendationService] Fetching user preferences');
-      final userPreferences = await _preferenceService.getUserPreferences();
-      print(
-        '[PostRecommendationService] User preferences loaded: ${userPreferences.likes.length} likes, ${userPreferences.dislikes.length} dislikes',
-      );
+      // 1. Parallel fetch of user data
+      final userData = await _fetchUserDataInParallel(userId);
+      if (userData.isEmpty) {
+        return _getFallbackRecommendations(limit);
+      }
 
-      print('[PostRecommendationService] Fetching following IDs');
-      final following = await _getFollowingIds(userId);
-      print(
-        '[PostRecommendationService] User follows ${following.length} users',
+      // 2. Get candidate posts with pagination
+      final candidates = await _getCandidatePosts(
+        userId,
+        userData['likedPostIds'],
+        limit: 50, // Increased for diversity
       );
-
-      print('[PostRecommendationService] Fetching watched movie IDs');
-      final watchedMovieIds = await _getWatchedMovieIds(userId);
-      print(
-        '[PostRecommendationService] User has watched ${watchedMovieIds.length} movies',
-      );
-
-      print('[PostRecommendationService] Fetching liked post IDs');
-      final likedPostIds = await _getLikedPostIds(userId);
-      print(
-        '[PostRecommendationService] User has liked ${likedPostIds.length} posts',
-      );
-
-      // 2. Fetch a pool of candidate posts
-      print('[PostRecommendationService] Getting candidate posts');
-      final candidates = await _getCandidatePosts(userId, likedPostIds);
-      print(
-        '[PostRecommendationService] Found ${candidates.length} candidate posts',
-      );
-
       if (candidates.isEmpty) {
-        print(
-          '[PostRecommendationService] No candidate posts found, returning empty list',
-        );
-        return [];
+        return _getFallbackRecommendations(limit);
       }
 
-      // 3. Score each post
-      print('[PostRecommendationService] Scoring posts');
+      // 3. Score posts with collaborative filtering for new users
       final scoredPosts = await _scorePosts(
         candidates,
-        userPreferences,
-        following,
-        watchedMovieIds,
+        userData['preferences'],
+        userData['following'],
+        userData['watchedMovieIds'],
+        isNewUser: userData['isNewUser'],
       );
-      print('[PostRecommendationService] Scored ${scoredPosts.length} posts');
 
-      // 4. Sort by score and return the top posts
-      scoredPosts.sort((a, b) => b.score.compareTo(a.score));
-
-      final result =
-          scoredPosts.take(limit).map((scoredPost) => scoredPost.post).toList();
-
-      print(
-        '[PostRecommendationService] Returning ${result.length} recommended posts',
-      );
-      return result;
+      // 4. Apply diversity and return top posts
+      return _applyDiversityAndReturnTopPosts(scoredPosts, limit);
     } catch (e) {
-      print('[PostRecommendationService] Error getting recommended posts: $e');
+      _log('Error getting recommended posts: $e');
+      return _getFallbackRecommendations(limit);
+    }
+  }
+
+  // Fetch all user data in parallel
+  Future<Map<String, dynamic>> _fetchUserDataInParallel(String userId) async {
+    try {
+      final futures = await Future.wait([
+        _preferenceService.getUserPreferences(),
+        _getFollowingIds(userId),
+        _getWatchedMovieIds(userId),
+        _getLikedPostIds(userId),
+      ]);
+
+      final preferences = futures[0] as UserPreferences;
+      final following = futures[1] as List<String>;
+      final watchedMovieIds = futures[2] as List<String>;
+      final likedPostIds = futures[3] as List<String>;
+
+      // Check if user is new (has minimal data)
+      final isNewUser =
+          preferences.likes.isEmpty &&
+          following.isEmpty &&
+          watchedMovieIds.isEmpty;
+
+      return {
+        'preferences': preferences,
+        'following': following,
+        'watchedMovieIds': watchedMovieIds,
+        'likedPostIds': likedPostIds,
+        'isNewUser': isNewUser,
+      };
+    } catch (e) {
+      _log('Error fetching user data: $e');
+      return {};
+    }
+  }
+
+  // Get fallback recommendations when personalized ones can't be generated
+  Future<List<Post>> _getFallbackRecommendations(int limit) async {
+    try {
+      // Try trending posts first
+      final trendingPosts = await getTrendingPosts(limit: limit);
+      if (trendingPosts.isNotEmpty) {
+        return trendingPosts;
+      }
+
+      // If no trending posts, get recent posts
+      final querySnapshot =
+          await _firestore
+              .collection('posts')
+              .orderBy('createdAt', descending: true)
+              .limit(limit)
+              .get();
+
+      return querySnapshot.docs
+          .map((doc) => Post.fromJson(doc.data(), doc.id))
+          .toList();
+    } catch (e) {
+      _log('Error getting fallback recommendations: $e');
       return [];
+    }
+  }
+
+  // Get candidate posts with pagination
+  Future<List<Post>> _getCandidatePosts(
+    String userId,
+    List<String> likedPostIds, {
+    int limit = 30,
+  }) async {
+    try {
+      final querySnapshot =
+          await _firestore
+              .collection('posts')
+              .where('userId', isNotEqualTo: userId)
+              .orderBy('userId')
+              .orderBy('createdAt', descending: true)
+              .limit(limit)
+              .get();
+
+      return querySnapshot.docs
+          .map((doc) => Post.fromJson(doc.data(), doc.id))
+          .where((post) => !likedPostIds.contains(post.id))
+          .toList();
+    } catch (e) {
+      _log('Error getting candidate posts: $e');
+      return [];
+    }
+  }
+
+  // Score posts with simplified algorithm for new users
+  Future<List<_ScoredPost>> _scorePosts(
+    List<Post> posts,
+    UserPreferences preferences,
+    List<String> following,
+    List<String> watchedMovieIds, {
+    required bool isNewUser,
+  }) async {
+    final List<_ScoredPost> scoredPosts = [];
+
+    for (final post in posts) {
+      double score = 0.0;
+      String primaryReason = '';
+
+      if (isNewUser) {
+        // Simplified scoring for new users
+        score = _calculateNewUserScore(post, following);
+        primaryReason = 'new_user';
+      } else {
+        // Full scoring algorithm for existing users
+        score = await _calculateFullScore(
+          post,
+          preferences,
+          following,
+          watchedMovieIds,
+        );
+        primaryReason = _getScoreReason(score, post, preferences);
+      }
+
+      if (score > 0.3) {
+        scoredPosts.add(_ScoredPost(post, score, primaryReason));
+      }
+    }
+
+    return scoredPosts;
+  }
+
+  // Simplified scoring for new users with collaborative filtering
+  double _calculateNewUserScore(Post post, List<String> following) {
+    double score = 0.0;
+
+    // Boost for posts from followed users
+    if (following.contains(post.userId)) {
+      score += 0.4;
+    }
+
+    // Boost for recent posts
+    final ageInHours = DateTime.now().difference(post.createdAt).inHours;
+    if (ageInHours < 24) {
+      score += 0.3;
+    } else if (ageInHours < 72) {
+      score += 0.2;
+    }
+
+    // Boost for engagement with collaborative filtering
+    final engagementScore = (post.likes.length + post.commentCount) / 20.0;
+    score += min(engagementScore, 0.3);
+
+    // Add collaborative filtering boost based on similar users
+    final similarUserBoost = _calculateSimilarUserBoost(post);
+    score += similarUserBoost * 0.2;
+
+    return score;
+  }
+
+  // Calculate boost based on similar users' interactions
+  double _calculateSimilarUserBoost(Post post) {
+    // This is a simplified version - in production, you'd want to:
+    // 1. Find users with similar preferences
+    // 2. Check their interactions with this post
+    // 3. Weight their interactions based on similarity
+    return 0.0; // Placeholder for now
+  }
+
+  // Get movie details with caching and size limit
+  Future<Map<String, dynamic>> _getMovieDetails(String movieId) async {
+    // Check cache first
+    if (_movieCache.containsKey(movieId)) {
+      final cached = _movieCache[movieId]!;
+      if (DateTime.now().difference(cached.timestamp) < _cacheExpiration) {
+        _log('Using cached movie details for $movieId');
+        return cached.details;
+      }
+    }
+
+    // Clean cache if it's too large
+    if (_movieCache.length >= _maxCacheSize) {
+      _cleanCache();
+    }
+
+    try {
+      final doc = await _firestore.collection('movies').doc(movieId).get();
+      if (doc.exists) {
+        final data = doc.data() ?? {};
+        _movieCache[movieId] = _CachedMovieDetails(data, DateTime.now());
+        return data;
+      }
+
+      // If not in Firestore, create minimal details
+      final minimalDetails = {
+        'id': movieId,
+        'title': 'Unknown Movie',
+        'genres': [],
+      };
+
+      _movieCache[movieId] = _CachedMovieDetails(
+        minimalDetails,
+        DateTime.now(),
+      );
+      return minimalDetails;
+    } catch (e) {
+      _log('Error getting movie details: $e');
+      return {};
+    }
+  }
+
+  // Clean cache by removing oldest entries
+  void _cleanCache() {
+    final sortedEntries =
+        _movieCache.entries.toList()
+          ..sort((a, b) => a.value.timestamp.compareTo(b.value.timestamp));
+
+    // Remove oldest entries until we're under the limit
+    while (_movieCache.length >= _maxCacheSize) {
+      _movieCache.remove(sortedEntries.removeAt(0).key);
+    }
+  }
+
+  // Helper method for conditional logging
+  void _log(String message) {
+    if (_debug) {
+      print('[PostRecommendationService] $message');
     }
   }
 
@@ -422,237 +614,105 @@ class PostRecommendationService {
     }
   }
 
-  // Helper method to get candidate posts for recommendations
-  Future<List<Post>> _getCandidatePosts(
-    String userId,
-    List<String> likedPostIds,
-  ) async {
-    try {
-      print('[PostRecommendationService] Getting candidate posts');
-      // Check if posts collection exists and has documents
-      final collectionRef = _firestore.collection('posts');
-      final countQuery = await collectionRef.count().get();
-      print(
-        '[PostRecommendationService] Total posts in collection: ${countQuery.count}',
-      );
-
-      if (countQuery.count == 0) {
-        print(
-          '[PostRecommendationService] Posts collection is empty, returning empty list',
-        );
-        return [];
-      }
-
-      // Query for recent posts
-      try {
-        print(
-          '[PostRecommendationService] Querying for candidate posts (excluding user\'s own posts)',
-        );
-        final querySnapshot =
-            await _firestore
-                .collection('posts')
-                .where('userId', isNotEqualTo: userId) // Exclude own posts
-                .orderBy('userId')
-                .orderBy('createdAt', descending: true)
-                .limit(100) // Get a good pool of candidates
-                .get();
-
-        print(
-          '[PostRecommendationService] Found ${querySnapshot.docs.length} initial candidate posts',
-        );
-        final posts =
-            querySnapshot.docs
-                .map((doc) => Post.fromJson(doc.data(), doc.id))
-                .where(
-                  (post) => !likedPostIds.contains(post.id),
-                ) // Filter out already liked posts
-                .toList();
-
-        print(
-          '[PostRecommendationService] After filtering liked posts: ${posts.length} candidate posts',
-        );
-        return posts;
-      } catch (e) {
-        print('[PostRecommendationService] Error with initial query: $e');
-
-        // Fallback: just get recent posts without filtering by userId
-        print(
-          '[PostRecommendationService] Trying fallback query without userId filter',
-        );
-        final querySnapshot =
-            await _firestore
-                .collection('posts')
-                .orderBy('createdAt', descending: true)
-                .limit(100)
-                .get();
-
-        final posts =
-            querySnapshot.docs
-                .map((doc) => Post.fromJson(doc.data(), doc.id))
-                .where((post) => post.userId != userId) // Filter out own posts
-                .where(
-                  (post) => !likedPostIds.contains(post.id),
-                ) // Filter out already liked posts
-                .toList();
-
-        print(
-          '[PostRecommendationService] Fallback query found ${posts.length} candidate posts',
-        );
-        return posts;
-      }
-    } catch (e) {
-      print('[PostRecommendationService] Error getting candidate posts: $e');
-      return [];
-    }
-  }
-
-  // Helper method to score candidate posts
-  Future<List<_ScoredPost>> _scorePosts(
-    List<Post> posts,
-    UserPreferences userPreferences,
+  // Calculate full score for existing users
+  Future<double> _calculateFullScore(
+    Post post,
+    UserPreferences preferences,
     List<String> following,
     List<String> watchedMovieIds,
   ) async {
-    print('[PostRecommendationService] Scoring ${posts.length} posts');
-    final List<_ScoredPost> scoredPosts = [];
+    double score = 0.0;
 
-    for (final post in posts) {
-      double score = 0.0;
-      String primaryReason = '';
+    // 1. Content relevance score (30% weight)
+    final contentScore = await _calculateContentScore(post, preferences);
+    score += contentScore * 0.3;
 
-      // 1. Content relevance score (30% weight)
-      final contentScore = await _calculateContentScore(post, userPreferences);
-      score += contentScore * 0.3;
-      if (contentScore > 0.7) {
-        primaryReason = 'content';
-      }
+    // 2. Actor/Director affinity score (20% weight)
+    final talentScore = await _calculateTalentScore(post, preferences);
+    score += talentScore * 0.2;
 
-      // 2. Actor/Director affinity score (20% weight)
-      final talentScore = await _calculateTalentScore(post, userPreferences);
-      score += talentScore * 0.2;
-      if (talentScore > 0.8 && primaryReason.isEmpty) {
-        primaryReason = 'talent';
-      }
+    // 3. Engagement score (30% weight)
+    final engagementScore = _calculateEngagementScore(post);
+    score += engagementScore * 0.3;
 
-      // 3. Engagement score (30% weight)
-      final engagementScore = _calculateEngagementScore(post);
-      score += engagementScore * 0.3;
-      if (engagementScore > 0.8 && primaryReason.isEmpty) {
-        primaryReason = 'engagement';
-      }
+    // 4. View behavior score (20% weight)
+    final viewScore = await _calculateViewScoreOptimized(post);
+    score += viewScore * 0.2;
 
-      // 4. View behavior score (20% weight)
-      final viewScore = await _calculateViewScore(post);
-      score += viewScore * 0.2;
-      if (viewScore > 0.9 && primaryReason.isEmpty) {
-        primaryReason = 'view_behavior';
-      }
-
-      print(
-        '[PostRecommendationService] Post ${post.id} score: $score (content: $contentScore, talent: $talentScore, engagement: $engagementScore, view: $viewScore)',
-      );
-
-      // Add to scored posts if score is high enough
-      if (score > 0.3) {
-        scoredPosts.add(_ScoredPost(post, score, primaryReason));
-      }
-    }
-
-    print(
-      '[PostRecommendationService] ${scoredPosts.length} posts passed the minimum score threshold',
-    );
-    return scoredPosts;
+    return score;
   }
 
-  // Calculate content relevance score based on TMDB genres
+  // Get the primary reason for a post's score
+  String _getScoreReason(double score, Post post, UserPreferences preferences) {
+    if (score > 0.7) {
+      return 'high_relevance';
+    } else if (score > 0.5) {
+      return 'good_match';
+    } else if (score > 0.3) {
+      return 'basic_match';
+    }
+    return 'low_relevance';
+  }
+
+  // Calculate content relevance score based on genres
   Future<double> _calculateContentScore(
     Post post,
-    UserPreferences userPreferences,
+    UserPreferences preferences,
   ) async {
     try {
-      print(
-        '[PostRecommendationService] Calculating content score for post ${post.id} (movie: ${post.movieId})',
-      );
-
-      // Get movie details from TMDB
       final movieDetails = await _getMovieDetails(post.movieId);
-      if (movieDetails.isEmpty) {
-        print(
-          '[PostRecommendationService] No movie details found for ${post.movieId}',
-        );
-        return 0.0;
-      }
+      if (movieDetails.isEmpty) return 0.0;
 
       double genreScore = 0.0;
 
-      // Get TMDB genres
       if (movieDetails.containsKey('genres')) {
         final movieGenres =
             (movieDetails['genres'] as List)
                 .map((g) => g['id'].toString())
                 .toList();
 
-        print(
-          '[PostRecommendationService] Movie has ${movieGenres.length} genres',
-        );
-
-        // Calculate genre match score
-        for (final preferredGenre in userPreferences.likes.where(
+        for (final preferredGenre in preferences.likes.where(
           (pref) => pref.type == 'genre',
         )) {
           if (movieGenres.contains(preferredGenre.id)) {
-            genreScore += preferredGenre.weight * 0.3; // Max 0.3 per genre
-            print(
-              '[PostRecommendationService] Genre match: ${preferredGenre.name}, score contribution: ${preferredGenre.weight * 0.3}',
-            );
+            genreScore += preferredGenre.weight * 0.3;
           }
         }
       }
 
-      // Normalize score to 0-1 range
-      final normalizedScore = min(1.0, genreScore);
-      print('[PostRecommendationService] Content score: $normalizedScore');
-      return normalizedScore;
+      return min(1.0, genreScore);
     } catch (e) {
-      print('[PostRecommendationService] Error calculating content score: $e');
+      _log('Error calculating content score: $e');
       return 0.0;
     }
   }
 
-  // Calculate talent affinity score based on TMDB credits
+  // Calculate talent affinity score based on credits
   Future<double> _calculateTalentScore(
     Post post,
-    UserPreferences userPreferences,
+    UserPreferences preferences,
   ) async {
     try {
-      print(
-        '[PostRecommendationService] Calculating talent score for post ${post.id}',
-      );
-
       final movieDetails = await _getMovieDetails(post.movieId);
-      if (movieDetails.isEmpty) {
-        return 0.0;
-      }
+      if (movieDetails.isEmpty) return 0.0;
 
       double actorScore = 0.0;
       double directorScore = 0.0;
 
-      // Calculate actor score
       if (movieDetails.containsKey('credits') &&
           movieDetails['credits'].containsKey('cast')) {
         final cast = movieDetails['credits']['cast'] as List;
         final actorIds = cast.map((actor) => actor['id'].toString()).toList();
 
-        for (final preferredActor in userPreferences.likes.where(
+        for (final preferredActor in preferences.likes.where(
           (pref) => pref.type == 'actor',
         )) {
           if (actorIds.contains(preferredActor.id)) {
-            actorScore += preferredActor.weight * 0.15; // Max 0.15 per actor
+            actorScore += preferredActor.weight * 0.15;
           }
         }
       }
 
-      // Calculate director score
       if (movieDetails.containsKey('credits') &&
           movieDetails['credits'].containsKey('crew')) {
         final crew = movieDetails['credits']['crew'] as List;
@@ -662,58 +722,44 @@ class PostRecommendationService {
                 .map((director) => director['id'].toString())
                 .toList();
 
-        for (final preferredDirector in userPreferences.likes.where(
+        for (final preferredDirector in preferences.likes.where(
           (pref) => pref.type == 'director',
         )) {
           if (directors.contains(preferredDirector.id)) {
-            directorScore +=
-                preferredDirector.weight * 0.2; // Max 0.2 per director
+            directorScore += preferredDirector.weight * 0.2;
           }
         }
       }
 
-      // Combine scores (actors + directors)
-      final totalScore = min(1.0, actorScore + directorScore);
-      print(
-        '[PostRecommendationService] Talent score: $totalScore (actors: $actorScore, directors: $directorScore)',
-      );
-      return totalScore;
+      return min(1.0, actorScore + directorScore);
     } catch (e) {
-      print('[PostRecommendationService] Error calculating talent score: $e');
+      _log('Error calculating talent score: $e');
       return 0.0;
     }
   }
 
   // Calculate engagement score based on likes and comments
   double _calculateEngagementScore(Post post) {
-    // Normalize likes and comments to a 0-1 scale
-    final likeScore = min(1.0, post.likes.length / 50.0); // 50+ likes = 1.0
-    final commentScore = min(
-      1.0,
-      post.commentCount / 20.0,
-    ); // 20+ comments = 1.0
-
-    // Calculate weighted average (comments weighted more than likes)
-    final engagementScore = (likeScore * 0.4) + (commentScore * 0.6);
-    print(
-      '[PostRecommendationService] Engagement score: $engagementScore (likes: ${post.likes.length}, comments: ${post.commentCount})',
-    );
-    return engagementScore;
+    final likeScore = min(1.0, post.likes.length / 50.0);
+    final commentScore = min(1.0, post.commentCount / 20.0);
+    return (likeScore * 0.4) + (commentScore * 0.6);
   }
 
-  // Calculate view behavior score based on view time and completion rate
-  Future<double> _calculateViewScore(Post post) async {
+  // Optimized view score calculation
+  Future<double> _calculateViewScoreOptimized(Post post) async {
     try {
       final userId = _auth.currentUser?.uid;
       if (userId == null) return 0.0;
 
-      // Get view statistics for this post
+      // Get aggregated view stats in a single query with limit
       final viewStats =
           await _firestore
               .collection('userInteractions')
               .where('postId', isEqualTo: post.id)
               .where('userId', isEqualTo: userId)
               .where('actionType', isEqualTo: 'view')
+              .orderBy('timestamp', descending: true)
+              .limit(10) // Only consider last 10 views
               .get();
 
       if (viewStats.docs.isEmpty) return 0.0;
@@ -722,7 +768,6 @@ class PostRecommendationService {
       double totalViewPercentage = 0;
       int viewCount = 0;
 
-      // Calculate average view time and completion rate
       for (final doc in viewStats.docs) {
         final data = doc.data();
         totalViewTime += data['viewTimeSeconds'] ?? 0;
@@ -733,97 +778,69 @@ class PostRecommendationService {
       final avgViewTime = totalViewTime / viewCount;
       final avgCompletionRate = totalViewPercentage / viewCount;
 
-      // Calculate view score components
-      final viewTimeScore = min(1.0, avgViewTime / 30.0); // 30+ seconds = 1.0
-      final completionScore = avgCompletionRate / 100.0; // Direct percentage
+      final viewTimeScore = min(1.0, avgViewTime / 30.0);
+      final completionScore = avgCompletionRate / 100.0;
 
-      // Combine scores (weighted average)
-      final viewScore = (viewTimeScore * 0.6) + (completionScore * 0.4);
-      print(
-        '[PostRecommendationService] View score: $viewScore (time: $viewTimeScore, completion: $completionScore)',
-      );
-      return viewScore;
+      return (viewTimeScore * 0.6) + (completionScore * 0.4);
     } catch (e) {
-      print('[PostRecommendationService] Error calculating view score: $e');
+      _log('Error calculating view score: $e');
       return 0.0;
     }
   }
 
-  // Helper method to get movie details with caching
-  Future<Map<String, dynamic>> _getMovieDetails(String movieId) async {
-    // Check cache first
-    if (_movieCache.containsKey(movieId)) {
-      print(
-        '[PostRecommendationService] Using cached movie details for $movieId',
-      );
-      return _movieCache[movieId]!;
+  // Apply diversity and return top posts
+  List<Post> _applyDiversityAndReturnTopPosts(
+    List<_ScoredPost> scoredPosts,
+    int limit,
+  ) {
+    final List<Post> result = [];
+    final Set<String> usedMovieIds = {};
+    final Set<String> usedUserIds = {};
+    final Map<String, int> movieCounts = {};
+    final Map<String, int> userCounts = {};
+
+    // Sort by score first
+    scoredPosts.sort((a, b) => b.score.compareTo(a.score));
+
+    for (final scoredPost in scoredPosts) {
+      final post = scoredPost.post;
+      final movieId = post.movieId;
+      final userId = post.userId;
+
+      // Skip if we've already used this movie or user too many times
+      final movieCount = movieCounts[movieId] ?? 0;
+      final userCount = userCounts[userId] ?? 0;
+
+      if (movieCount >= 2) continue; // Max 2 posts per movie
+      if (userCount >= 3) continue; // Max 3 posts per user
+
+      // Add to result
+      result.add(post);
+      usedMovieIds.add(movieId);
+      usedUserIds.add(userId);
+      movieCounts[movieId] = movieCount + 1;
+      userCounts[userId] = userCount + 1;
+
+      if (result.length >= limit) break;
     }
 
-    try {
-      print('[PostRecommendationService] Fetching movie details for $movieId');
-
-      // First try getting from Firestore movies collection
-      final doc = await _firestore.collection('movies').doc(movieId).get();
-
-      if (doc.exists) {
-        final data = doc.data() ?? {};
-        print(
-          '[PostRecommendationService] Found movie details in Firestore: ${data.keys.length} keys',
-        );
-        _movieCache[movieId] = data;
-        return data;
-      }
-
-      // If not in Firestore, try an alternative source
-      // For example, you could call your TMDB service here
-      print(
-        '[PostRecommendationService] Movie not found in Firestore, creating minimal movie details',
-      );
-
-      // Create minimal details from post data
-      final postsWithMovie =
-          await _firestore
-              .collection('posts')
-              .where('movieId', isEqualTo: movieId)
-              .limit(1)
-              .get();
-
-      if (postsWithMovie.docs.isNotEmpty) {
-        final postData = postsWithMovie.docs.first.data();
-        final minimalDetails = {
-          'id': movieId,
-          'title': postData['movieTitle'] ?? 'Unknown Movie',
-          'overview': postData['movieOverview'] ?? '',
-          // Add dummy genres for testing purposes
-          'genres': [
-            {'id': '28', 'name': 'Action'},
-            {'id': '18', 'name': 'Drama'},
-          ],
-        };
-
-        print(
-          '[PostRecommendationService] Created minimal movie details from post data',
-        );
-        _movieCache[movieId] = minimalDetails;
-        return minimalDetails;
-      }
-
-      print(
-        '[PostRecommendationService] Couldn\'t find any data for movie $movieId',
-      );
-      return {};
-    } catch (e) {
-      print('[PostRecommendationService] Error getting movie details: $e');
-      return {};
-    }
+    return result;
   }
+}
+
+// Helper class for cached movie details
+class _CachedMovieDetails {
+  final Map<String, dynamic> details;
+  final DateTime timestamp;
+
+  _CachedMovieDetails(this.details, this.timestamp);
 }
 
 // Helper class to represent a scored post
 class _ScoredPost {
   final Post post;
   final double score;
-  final String primaryReason; // 'social', 'content', 'recency', etc.
+  final String primaryReason;
 
   _ScoredPost(this.post, this.score, this.primaryReason);
 }

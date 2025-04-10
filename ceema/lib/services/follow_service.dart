@@ -13,6 +13,9 @@ class FollowService {
   final Map<String, List<Follow>> _followsCache = {};
   final Map<String, DocumentSnapshot?> _lastFollowDocCache = {};
 
+  // Cache for follow relationships
+  final Map<String, bool> _followRelationshipCache = {};
+
   // Get followers with pagination
   Stream<List<Follow>> getFollowers(
     String userId, {
@@ -98,11 +101,59 @@ class FollowService {
     return _lastFollowDocCache[cacheKey];
   }
 
+  // Check if following with caching
+  Future<bool> isFollowing(String targetId) async {
+    try {
+      final currentUser = _auth.currentUser;
+      if (currentUser == null) return false;
+
+      // Check cache first
+      final cacheKey = '${currentUser.uid}_$targetId';
+      if (_followRelationshipCache.containsKey(cacheKey)) {
+        return _followRelationshipCache[cacheKey]!;
+      }
+
+      // Query Firestore if not in cache
+      final followQuery =
+          await _firestore
+              .collection('follows')
+              .where('followerId', isEqualTo: currentUser.uid)
+              .where('followedId', isEqualTo: targetId)
+              .limit(1)
+              .get();
+
+      final isFollowing = followQuery.docs.isNotEmpty;
+      // Update cache
+      _followRelationshipCache[cacheKey] = isFollowing;
+
+      return isFollowing;
+    } catch (e) {
+      print('Error checking follow status: $e');
+      return false;
+    }
+  }
+
+  // Clear cache for a specific relationship
+  void clearFollowCache(String targetId) {
+    final currentUser = _auth.currentUser;
+    if (currentUser != null) {
+      _followRelationshipCache.remove('${currentUser.uid}_$targetId');
+    }
+  }
+
+  // Clear entire cache
+  void clearAllFollowCache() {
+    _followRelationshipCache.clear();
+  }
+
   // Follow a user
   Future<void> followUser(String targetId) async {
     try {
       final currentUser = _auth.currentUser;
       if (currentUser == null) return;
+
+      // Clear cache before making changes
+      clearFollowCache(targetId);
 
       // Prevent users from following themselves
       if (currentUser.uid == targetId) {
@@ -192,33 +243,6 @@ class FollowService {
     } catch (e) {
       print('Error unfollowing user: $e');
       rethrow;
-    }
-  }
-
-  // Check if following a user
-  Future<bool> isFollowing(String targetId) async {
-    try {
-      final currentUser = _auth.currentUser;
-      if (currentUser == null) return false;
-
-      // Check cache first
-      final cachedFollowing = getCachedFollowing(currentUser.uid);
-      if (cachedFollowing != null) {
-        return cachedFollowing.any((follow) => follow.followedId == targetId);
-      }
-
-      // If not in cache, query Firestore
-      final followQuery =
-          await _firestore
-              .collection('follows')
-              .where('followerId', isEqualTo: currentUser.uid)
-              .where('followedId', isEqualTo: targetId)
-              .get();
-
-      return followQuery.docs.isNotEmpty;
-    } catch (e) {
-      print('Error checking follow status: $e');
-      return false;
     }
   }
 

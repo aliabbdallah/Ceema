@@ -19,7 +19,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _bioController = TextEditingController();
-  final _favoriteGenresController = TextEditingController();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -40,28 +39,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     'assets/avatars/avatar6.png',
   ];
   String? _selectedPresetAvatar;
-  List<String> _selectedGenres = [];
-
-  final List<String> _availableGenres = [
-    'Action',
-    'Adventure',
-    'Animation',
-    'Comedy',
-    'Crime',
-    'Documentary',
-    'Drama',
-    'Family',
-    'Fantasy',
-    'History',
-    'Horror',
-    'Music',
-    'Mystery',
-    'Romance',
-    'Science Fiction',
-    'Thriller',
-    'War',
-    'Western',
-  ];
 
   @override
   void initState() {
@@ -73,7 +50,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   void dispose() {
     _usernameController.dispose();
     _bioController.dispose();
-    _favoriteGenresController.dispose();
     super.dispose();
   }
 
@@ -94,7 +70,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         setState(() {
           _usernameController.text = userData['username'] ?? '';
           _bioController.text = userData['bio'] ?? '';
-          _selectedGenres = List<String>.from(userData['favoriteGenres'] ?? []);
 
           // Load profile image URL
           final profileImageUrl = userData['profileImageUrl'];
@@ -237,7 +212,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         'username': _usernameController.text.trim(),
         'bio': _bioController.text.trim(),
         'profileImageUrl': profileImageUrl,
-        'favoriteGenres': _selectedGenres,
       });
 
       // Also update the Firebase Auth user profile
@@ -524,42 +498,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                         maxLength: 150,
                       ),
                       const SizedBox(height: 16),
-
-                      // Favorite Genres
-                      Text(
-                        'Favorite Genres',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8.0,
-                        runSpacing: 8.0,
-                        children:
-                            _availableGenres.map((genre) {
-                              final isSelected = _selectedGenres.contains(
-                                genre,
-                              );
-                              return FilterChip(
-                                label: Text(genre),
-                                selected: isSelected,
-                                selectedColor: Theme.of(
-                                  context,
-                                ).primaryColor.withOpacity(0.3),
-                                checkmarkColor: Theme.of(context).primaryColor,
-                                onSelected: (selected) {
-                                  setState(() {
-                                    if (selected) {
-                                      _selectedGenres.add(genre);
-                                    } else {
-                                      _selectedGenres.remove(genre);
-                                    }
-                                  });
-                                },
-                              );
-                            }).toList(),
-                      ),
-
-                      const SizedBox(height: 24),
 
                       // Podium Section
                       const Divider(),

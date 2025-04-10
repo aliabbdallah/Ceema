@@ -7,6 +7,9 @@ enum NotificationType {
   postLike,
   postComment,
   systemNotice,
+  followRequestSent,
+  followRequestSentAccepted,
+  commentReply,
 }
 
 class Notification {

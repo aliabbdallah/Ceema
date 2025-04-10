@@ -21,6 +21,8 @@ import 'followers_screen.dart';
 import '../home/components/post_card.dart';
 import '../widgets/podium_widget.dart';
 import '../screens/podium_edit_screen.dart';
+import '../models/movie.dart';
+import '../screens/movie_details_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String userId;
@@ -295,7 +297,21 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                 movies: user.podiumMovies,
                 isEditable: _auth.currentUser?.uid == widget.userId,
                 onMovieTap: (movie) {
-                  // TODO: Navigate to movie details
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (context) => MovieDetailsScreen(
+                            movie: Movie(
+                              id: movie.tmdbId,
+                              title: movie.title,
+                              posterUrl: movie.posterUrl,
+                              year: '', // We'll get this from the API
+                              overview: '', // We'll get this from the API
+                            ),
+                          ),
+                    ),
+                  );
                 },
                 onRankTap:
                     _auth.currentUser?.uid == widget.userId
@@ -573,9 +589,10 @@ class _UserProfileScreenState extends State<UserProfileScreen>
           return CustomScrollView(
             slivers: [
               SliverAppBar(
-                expandedHeight: 200,
-                floating: false,
-                pinned: true,
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => Navigator.pop(context),
+                ),
                 title: Text(
                   user.username,
                   style: Theme.of(
@@ -633,6 +650,20 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                       imageUrl: user.profileImageUrl,
                       radius: 50,
                       fallbackName: user.username,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      user.displayName ?? user.username,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '@${user.username}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.secondary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     if (user.bio != null && user.bio!.isNotEmpty) ...[

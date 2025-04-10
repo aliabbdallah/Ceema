@@ -126,7 +126,7 @@ class PostList extends StatelessWidget {
                     horizontal: 16,
                     vertical: 8,
                   ),
-                  child: PostCard(post: snapshot.data![index]),
+                  child: SeamlessPostCard(post: snapshot.data![index]),
                 ),
               );
             },

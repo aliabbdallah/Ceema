@@ -41,11 +41,31 @@ class PostService {
         .orderBy('createdAt', descending: true)
         .limit(50) // Limit to most recent 50 posts for better performance
         .snapshots()
-        .map((snapshot) {
-          final posts =
-              snapshot.docs
-                  .map((doc) => Post.fromJson(doc.data(), doc.id))
-                  .toList();
+        .asyncMap((snapshot) async {
+          final posts = await Future.wait(
+            snapshot.docs.map((doc) async {
+              final postData = doc.data();
+              // Fetch the current user data
+              final userDoc =
+                  await _firestore
+                      .collection('users')
+                      .doc(postData['userId'])
+                      .get();
+              final userData = userDoc.data() ?? {};
+
+              // Create post with updated user data
+              return Post.fromJson({
+                ...postData,
+                'username': userData['username'] ?? postData['userName'],
+                'displayName':
+                    userData['displayName'] ??
+                    userData['username'] ??
+                    postData['userName'],
+                'profileImageUrl':
+                    userData['profileImageUrl'] ?? postData['userAvatar'],
+              }, doc.id);
+            }),
+          );
 
           // Sort by creation time to ensure newest posts appear first
           posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -60,10 +80,25 @@ class PostService {
         .where('userId', isEqualTo: userId)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => Post.fromJson(doc.data(), doc.id))
-              .toList();
+        .asyncMap((snapshot) async {
+          // Fetch the current user data
+          final userDoc =
+              await _firestore.collection('users').doc(userId).get();
+          final userData = userDoc.data() ?? {};
+
+          return snapshot.docs.map((doc) {
+            final postData = doc.data();
+            return Post.fromJson({
+              ...postData,
+              'username': userData['username'] ?? postData['userName'],
+              'displayName':
+                  userData['displayName'] ??
+                  userData['username'] ??
+                  postData['userName'],
+              'profileImageUrl':
+                  userData['profileImageUrl'] ?? postData['userAvatar'],
+            }, doc.id);
+          }).toList();
         });
   }
 
@@ -90,10 +125,30 @@ class PostService {
                 .orderBy('createdAt', descending: true)
                 .get();
 
-        final posts =
-            querySnapshot.docs
-                .map((doc) => Post.fromJson(doc.data(), doc.id))
-                .toList();
+        // Fetch user data for all posts in this chunk
+        final posts = await Future.wait(
+          querySnapshot.docs.map((doc) async {
+            final postData = doc.data();
+            final userDoc =
+                await _firestore
+                    .collection('users')
+                    .doc(postData['userId'])
+                    .get();
+            final userData = userDoc.data() ?? {};
+
+            return Post.fromJson({
+              ...postData,
+              'username': userData['username'] ?? postData['userName'],
+              'displayName':
+                  userData['displayName'] ??
+                  userData['username'] ??
+                  postData['userName'],
+              'profileImageUrl':
+                  userData['profileImageUrl'] ?? postData['userAvatar'],
+            }, doc.id);
+          }),
+        );
+
         yield posts;
       }
     } catch (e) {
@@ -161,24 +216,107 @@ class PostService {
     }
   }
 
-  // Get comments for a post
-  Stream<List<dynamic>> getComments(String postId) {
-    return _firestore
+  // Add a reply to a comment
+  Future<void> addReply({
+    required String postId,
+    required String parentCommentId,
+    required String userId,
+    required String userName,
+    required String userAvatar,
+    required String content,
+  }) async {
+    final commentRef =
+        _firestore.collection('posts').doc(postId).collection('comments').doc();
+
+    // Get the parent comment data
+    final parentCommentRef = _firestore
         .collection('posts')
         .doc(postId)
         .collection('comments')
-        .orderBy('createdAt', descending: false) // Show oldest comments first
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs.map((doc) {
-            final data = doc.data();
+        .doc(parentCommentId);
+    final parentComment = await parentCommentRef.get();
+
+    if (!parentComment.exists) {
+      throw Exception('Parent comment not found');
+    }
+
+    // Start a batch write
+    final batch = _firestore.batch();
+
+    // Add the reply
+    batch.set(commentRef, {
+      'userId': userId,
+      'userName': userName,
+      'userAvatar': userAvatar,
+      'content': content,
+      'postId': postId,
+      'parentCommentId': parentCommentId,
+      'createdAt': FieldValue.serverTimestamp(),
+      'likes': <String>[],
+      'replyCount': 0,
+    });
+
+    // Update the parent comment's reply count
+    batch.update(parentCommentRef, {'replyCount': FieldValue.increment(1)});
+
+    // Execute the batch
+    await batch.commit();
+
+    // Notify the parent comment owner about the reply
+    final parentCommentOwnerId = parentComment.data()?['userId'] as String;
+    if (parentCommentOwnerId != userId) {
+      try {
+        await _notificationService.createCommentReplyNotification(
+          recipientUserId: parentCommentOwnerId,
+          senderUserId: userId,
+          senderName: userName,
+          senderPhotoUrl: userAvatar,
+          postId: postId,
+          commentId: parentCommentId,
+          replyText: content,
+        );
+      } catch (e) {
+        print('Error creating reply notification: $e');
+      }
+    }
+  }
+
+  // Get comments for a post with optional parent comment filter
+  Stream<List<dynamic>> getComments(String postId, {String? parentCommentId}) {
+    Query query = _firestore
+        .collection('posts')
+        .doc(postId)
+        .collection('comments');
+
+    // If parentCommentId is provided, get replies to that comment
+    if (parentCommentId != null) {
+      query = query.where('parentCommentId', isEqualTo: parentCommentId);
+    }
+    // For top-level comments, don't filter by parentCommentId at all
+    // This will show all comments that don't have a parentCommentId field
+
+    return query.orderBy('createdAt', descending: false).snapshots().map((
+      snapshot,
+    ) {
+      return snapshot.docs
+          .map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            // Only include comments without parentCommentId when getting top-level comments
+            if (parentCommentId == null && data['parentCommentId'] != null) {
+              return null;
+            }
             return {
               'id': doc.id,
+              'postId': postId,
               ...data,
               'createdAt': data['createdAt']?.toDate() ?? DateTime.now(),
+              'likes': List<String>.from(data['likes'] ?? []),
+              'replyCount': data['replyCount'] ?? 0,
             };
-          }).toList();
-        });
+          })
+          .where((comment) => comment != null)
+          .toList();
+    });
   }
 
   // Add a comment to a post
@@ -208,8 +346,9 @@ class PostService {
       'userName': userName,
       'userAvatar': userAvatar,
       'content': content,
+      'postId': postId,
       'createdAt': FieldValue.serverTimestamp(),
-      'likes': [],
+      'likes': <String>[], // Initialize as empty String array
     });
 
     // Update the comment count on the post
@@ -238,12 +377,21 @@ class PostService {
   }
 
   // Toggle like on a comment
-  Future<void> toggleCommentLike(String commentId, String userId) async {
-    final commentRef = _firestore.collection('comments').doc(commentId);
+  Future<void> toggleCommentLike(
+    String commentId,
+    String postId,
+    String userId,
+  ) async {
+    final commentRef = _firestore
+        .collection('posts')
+        .doc(postId)
+        .collection('comments')
+        .doc(commentId);
     final comment = await commentRef.get();
 
     if (comment.exists) {
-      final likes = List<String>.from(comment.data()?['likes'] ?? []);
+      final data = comment.data() ?? {};
+      final likes = List<String>.from(data['likes'] ?? []);
 
       if (likes.contains(userId)) {
         // Unlike
@@ -261,12 +409,19 @@ class PostService {
 
   // Delete a comment
   Future<void> deleteComment(String commentId, String postId) async {
-    await _firestore.collection('comments').doc(commentId).delete();
+    // Get a reference to the post and comment
+    final postRef = _firestore.collection('posts').doc(postId);
+    final commentRef = postRef.collection('comments').doc(commentId);
 
-    // Update the comment count on the post
-    await _firestore.collection('posts').doc(postId).update({
-      'commentCount': FieldValue.increment(-1),
-    });
+    // Delete the comment
+    await commentRef.delete();
+
+    // Get all comments to count them
+    final commentsSnapshot = await postRef.collection('comments').get();
+    final commentCount = commentsSnapshot.docs.length;
+
+    // Update the post with the actual comment count
+    await postRef.update({'commentCount': commentCount});
   }
 
   // Delete a post
@@ -289,10 +444,42 @@ class PostService {
         .orderBy('likes', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) => Post.fromJson(doc.data(), doc.id))
-              .toList();
+        .asyncMap((snapshot) async {
+          final posts = await Future.wait(
+            snapshot.docs.map((doc) async {
+              final postData = doc.data();
+              // Fetch the current user data
+              final userDoc =
+                  await _firestore
+                      .collection('users')
+                      .doc(postData['userId'])
+                      .get();
+              final userData = userDoc.data() ?? {};
+
+              // Create post with updated user data
+              return Post.fromJson({
+                ...postData,
+                'username': userData['username'] ?? postData['userName'],
+                'displayName':
+                    userData['displayName'] ??
+                    userData['username'] ??
+                    postData['userName'],
+                'profileImageUrl':
+                    userData['profileImageUrl'] ?? postData['userAvatar'],
+              }, doc.id);
+            }),
+          );
+          return posts;
         });
+  }
+
+  // Get comments count for a post
+  Stream<int> getCommentsCount(String postId) {
+    return _firestore
+        .collection('posts')
+        .doc(postId)
+        .collection('comments')
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
   }
 }

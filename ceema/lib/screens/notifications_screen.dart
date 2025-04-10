@@ -12,6 +12,10 @@ import 'package:ceema/screens/follow_requests_screen.dart';
 import 'package:ceema/screens/comments_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ceema/models/post.dart';
+import 'package:ceema/services/follow_request_service.dart';
+import 'package:ceema/models/follow_request.dart';
+import 'package:ceema/services/follow_service.dart';
+import 'package:ceema/screens/post_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({Key? key}) : super(key: key);
@@ -83,7 +87,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  void _handleNotificationTap(app_notification.Notification notification) {
+  void _handleNotificationTap(
+    app_notification.Notification notification,
+  ) async {
+    // Mark notification as read
+    await _notificationService.markAsRead(notification.id);
+
     // Navigate based on notification type
     switch (notification.type) {
       case app_notification.NotificationType.followRequest:
@@ -92,23 +101,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           MaterialPageRoute(builder: (context) => const FollowRequestsScreen()),
         );
         break;
-      case app_notification.NotificationType.follow:
-      case app_notification.NotificationType.followRequestAccepted:
-        final currentUser = FirebaseAuth.instance.currentUser;
-        if (currentUser != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder:
-                  (context) => FollowersScreen(targetUserId: currentUser.uid),
-            ),
-          );
-        }
-        break;
+      case app_notification.NotificationType.commentReply:
       case app_notification.NotificationType.postLike:
       case app_notification.NotificationType.postComment:
         if (notification.referenceId != null) {
-          // Fetch the post data and navigate to comments screen
+          // Fetch the post data and navigate to post screen
           FirebaseFirestore.instance
               .collection('posts')
               .doc(notification.referenceId)
@@ -119,7 +116,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => CommentsScreen(post: post),
+                      builder: (context) => PostScreen(post: post),
                     ),
                   );
                 } else {
@@ -134,6 +131,34 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   SnackBar(content: Text('Error: ${error.toString()}')),
                 );
               });
+        }
+        break;
+      case app_notification.NotificationType.followRequestSent:
+      case app_notification.NotificationType.followRequestSentAccepted:
+        if (notification.senderUserId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => UserProfileScreen(
+                    userId: notification.senderUserId!,
+                    username: notification.senderName ?? 'User',
+                  ),
+            ),
+          );
+        }
+        break;
+      case app_notification.NotificationType.follow:
+      case app_notification.NotificationType.followRequestAccepted:
+        final currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => FollowersScreen(targetUserId: currentUser.uid),
+            ),
+          );
         }
         break;
       case app_notification.NotificationType.systemNotice:
@@ -154,11 +179,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         iconData = Icons.person_add_outlined;
         iconColor = Colors.blue;
         break;
+      case app_notification.NotificationType.commentReply:
+        iconData = Icons.reply_outlined;
+        iconColor = Colors.purple;
+        break;
       case app_notification.NotificationType.followRequest:
         iconData = Icons.person_add_outlined;
         iconColor = Colors.blue;
         break;
       case app_notification.NotificationType.followRequestAccepted:
+        iconData = Icons.people_outline;
+        iconColor = Colors.green;
+        break;
+      case app_notification.NotificationType.followRequestSent:
+        iconData = Icons.person_add_outlined;
+        iconColor = Colors.blue;
+        break;
+      case app_notification.NotificationType.followRequestSentAccepted:
         iconData = Icons.people_outline;
         iconColor = Colors.green;
         break;
@@ -193,8 +230,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             action: SnackBarAction(
               label: 'Undo',
               onPressed: () {
-                // No real undo functionality as we'd need to keep the notification data
-                // This would just show another snackbar in a real app
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Cannot restore notification')),
                 );
@@ -263,6 +298,297 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         color: colorScheme.outline,
                       ),
                     ),
+                    if (notification.type ==
+                        app_notification.NotificationType.followRequest)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            ElevatedButton(
+                              onPressed: () async {
+                                try {
+                                  final followRequestService =
+                                      FollowRequestService();
+                                  // Find the follow request document
+                                  final requestQuery =
+                                      await FirebaseFirestore.instance
+                                          .collection('follow_requests')
+                                          .where(
+                                            'requesterId',
+                                            isEqualTo:
+                                                notification.senderUserId,
+                                          )
+                                          .where(
+                                            'targetId',
+                                            isEqualTo:
+                                                FirebaseAuth
+                                                    .instance
+                                                    .currentUser
+                                                    ?.uid,
+                                          )
+                                          .where(
+                                            'status',
+                                            isEqualTo:
+                                                FollowRequestStatus
+                                                    .pending
+                                                    .name,
+                                          )
+                                          .get();
+
+                                  if (requestQuery.docs.isNotEmpty) {
+                                    await followRequestService
+                                        .acceptFollowRequest(
+                                          requestQuery.docs.first.id,
+                                        );
+                                    // Update notification to show follow back option
+                                    await _notificationService
+                                        .updateNotificationType(
+                                          notification.id,
+                                          app_notification
+                                              .NotificationType
+                                              .followRequestAccepted,
+                                        );
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Error accepting request: $e',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                              ),
+                              child: const Text('Accept'),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: () async {
+                                try {
+                                  final followRequestService =
+                                      FollowRequestService();
+                                  // Find the follow request document
+                                  final requestQuery =
+                                      await FirebaseFirestore.instance
+                                          .collection('follow_requests')
+                                          .where(
+                                            'requesterId',
+                                            isEqualTo:
+                                                notification.senderUserId,
+                                          )
+                                          .where(
+                                            'targetId',
+                                            isEqualTo:
+                                                FirebaseAuth
+                                                    .instance
+                                                    .currentUser
+                                                    ?.uid,
+                                          )
+                                          .where(
+                                            'status',
+                                            isEqualTo:
+                                                FollowRequestStatus
+                                                    .pending
+                                                    .name,
+                                          )
+                                          .get();
+
+                                  if (requestQuery.docs.isNotEmpty) {
+                                    await followRequestService
+                                        .declineFollowRequest(
+                                          requestQuery.docs.first.id,
+                                        );
+                                    // Delete the notification after declining
+                                    await _notificationService
+                                        .deleteNotification(notification.id);
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Error declining request: $e',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                              ),
+                              child: const Text('Decline'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (notification.type ==
+                        app_notification.NotificationType.followRequestAccepted)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'You accepted ${notification.senderName}\'s follow request',
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(color: Colors.green),
+                            ),
+                            const SizedBox(height: 8),
+                            FutureBuilder<bool>(
+                              future: FollowService().isFollowing(
+                                notification.senderUserId!,
+                              ),
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const SizedBox(
+                                    height: 36,
+                                    child: Center(
+                                      child: SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                final isAlreadyFollowing =
+                                    snapshot.data ?? false;
+
+                                if (isAlreadyFollowing) {
+                                  return Text(
+                                    'Already following',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium?.copyWith(
+                                      color: Colors.grey,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  );
+                                }
+
+                                return ElevatedButton(
+                                  onPressed: () async {
+                                    try {
+                                      final followRequestService =
+                                          FollowRequestService();
+                                      await followRequestService
+                                          .sendFollowRequest(
+                                            requesterId:
+                                                FirebaseAuth
+                                                    .instance
+                                                    .currentUser!
+                                                    .uid,
+                                            targetId:
+                                                notification.senderUserId!,
+                                          );
+                                      // Create a new notification for the sent request
+                                      await _notificationService
+                                          .createFollowRequestSentNotification(
+                                            recipientUserId:
+                                                FirebaseAuth
+                                                    .instance
+                                                    .currentUser!
+                                                    .uid,
+                                            senderUserId:
+                                                notification.senderUserId!,
+                                            senderName:
+                                                notification.senderName ??
+                                                'User',
+                                            senderPhotoUrl:
+                                                notification.senderPhotoUrl ??
+                                                '',
+                                          );
+                                      // Update this notification to show request sent
+                                      await _notificationService
+                                          .updateNotificationType(
+                                            notification.id,
+                                            app_notification
+                                                .NotificationType
+                                                .followRequestSent,
+                                          );
+                                      // Clear the follow cache for this user
+                                      FollowService().clearFollowCache(
+                                        notification.senderUserId!,
+                                      );
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Error sending follow request: $e',
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                  ),
+                                  child: const Text('Follow Back'),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (notification.type ==
+                        app_notification.NotificationType.followRequestSent)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Request sent',
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.copyWith(
+                            color: Colors.grey,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    if (notification.type ==
+                        app_notification
+                            .NotificationType
+                            .followRequestSentAccepted)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Now following',
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.copyWith(
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

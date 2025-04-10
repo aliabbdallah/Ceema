@@ -3,6 +3,7 @@ import '../models/follow_request.dart';
 import '../models/user.dart';
 import 'follow_service.dart';
 import 'notification_service.dart';
+import '../models/notification.dart' as app_notification;
 
 class FollowRequestService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -103,6 +104,23 @@ class FollowRequestService {
       senderName: request.targetName,
       senderPhotoUrl: request.targetAvatar,
     );
+
+    // Update any pending follow request sent notifications
+    final sentNotifications =
+        await _firestore
+            .collection('notifications')
+            .where('userId', isEqualTo: request.requesterId)
+            .where(
+              'type',
+              isEqualTo:
+                  app_notification.NotificationType.followRequestSent.name,
+            )
+            .where('senderUserId', isEqualTo: request.targetId)
+            .get();
+
+    for (var doc in sentNotifications.docs) {
+      await _notificationService.updateFollowRequestSentToAccepted(doc.id);
+    }
   }
 
   // Decline a follow request

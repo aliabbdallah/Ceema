@@ -240,9 +240,45 @@ class _ProfileScreenState extends State<ProfileScreen>
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildStatColumn('Following', user.followingCount),
-                _buildStatColumn('Followers', user.followersCount),
-                _buildStatColumn('Watchlist', user.watchlistCount),
+                InkWell(
+                  onTap:
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (context) =>
+                                  FollowingScreen(targetUserId: widget.userId),
+                        ),
+                      ),
+                  child: _buildStatColumn('Following', user.followingCount),
+                ),
+                InkWell(
+                  onTap:
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (context) =>
+                                  FollowersScreen(targetUserId: widget.userId),
+                        ),
+                      ),
+                  child: _buildStatColumn('Followers', user.followersCount),
+                ),
+                InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (context) => WatchlistScreen(
+                              userId: widget.userId,
+                              isCurrentUser: widget.isCurrentUser,
+                            ),
+                      ),
+                    );
+                  },
+                  child: _buildStatColumn('Watchlist', user.watchlistCount),
+                ),
               ],
             ),
             if (user.podiumMovies.isNotEmpty) ...[
@@ -360,8 +396,22 @@ class _ProfileScreenState extends State<ProfileScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
         actions: [
-          if (widget.isCurrentUser)
+          if (widget.isCurrentUser) ...[
+            IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ProfileEditScreen(),
+                    ),
+                  ),
+            ),
             IconButton(
               icon: const Icon(Icons.person_add),
               onPressed: () {
@@ -373,6 +423,17 @@ class _ProfileScreenState extends State<ProfileScreen>
                 );
               },
             ),
+            IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SettingsScreen(),
+                    ),
+                  ),
+            ),
+          ],
         ],
       ),
       body: StreamBuilder<UserModel>(
@@ -390,55 +451,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 
           return CustomScrollView(
             slivers: [
-              SliverAppBar(
-                expandedHeight: 200,
-                floating: false,
-                pinned: true,
-                flexibleSpace: FlexibleSpaceBar(
-                  title: Text(
-                    user.username,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.titleMedium?.copyWith(color: Colors.white),
-                  ),
-                  background: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Theme.of(context).colorScheme.primary,
-                          Theme.of(
-                            context,
-                          ).colorScheme.primary.withOpacity(0.7),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed:
-                        () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ProfileEditScreen(),
-                          ),
-                        ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.settings),
-                    onPressed:
-                        () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SettingsScreen(),
-                          ),
-                        ),
-                  ),
-                ],
-              ),
               SliverToBoxAdapter(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -448,6 +460,20 @@ class _ProfileScreenState extends State<ProfileScreen>
                       imageUrl: user.profileImageUrl,
                       radius: 50,
                       fallbackName: user.username,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      user.displayName ?? user.username,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '@${user.username}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.secondary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     if (user.bio != null && user.bio!.isNotEmpty) ...[

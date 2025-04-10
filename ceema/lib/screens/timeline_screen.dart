@@ -110,9 +110,10 @@ class _TimelineScreenState extends State<TimelineScreen>
               showCheckmark: false,
               selectedColor: colorScheme.primary,
               labelStyle: TextStyle(
-                color: isSelected
-                    ? colorScheme.onPrimary
-                    : colorScheme.onSurfaceVariant,
+                color:
+                    isSelected
+                        ? colorScheme.onPrimary
+                        : colorScheme.onSurfaceVariant,
               ),
               backgroundColor: colorScheme.surfaceVariant,
             ),
@@ -156,9 +157,10 @@ class _TimelineScreenState extends State<TimelineScreen>
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: item.type == TimelineItemType.similarToLiked
-              ? Theme.of(context).colorScheme.primary.withOpacity(0.5)
-              : Theme.of(context).colorScheme.outlineVariant,
+          color:
+              item.type == TimelineItemType.similarToLiked
+                  ? Theme.of(context).colorScheme.primary.withOpacity(0.5)
+                  : Theme.of(context).colorScheme.outlineVariant,
           width: item.type == TimelineItemType.similarToLiked ? 1 : 0.5,
         ),
       ),
@@ -174,7 +176,11 @@ class _TimelineScreenState extends State<TimelineScreen>
             ),
 
           // Post content
-          PostCard(post: item.post!),
+          SeamlessPostCard(
+            post: item.post!,
+            isHighlighted: item.type == TimelineItemType.similarToLiked,
+            relevanceReason: item.relevanceReason,
+          ),
         ],
       ),
     );
@@ -189,9 +195,10 @@ class _TimelineScreenState extends State<TimelineScreen>
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: item.type == TimelineItemType.recommendation
-              ? colorScheme.primary.withOpacity(0.3)
-              : colorScheme.outlineVariant,
+          color:
+              item.type == TimelineItemType.recommendation
+                  ? colorScheme.primary.withOpacity(0.3)
+                  : colorScheme.outlineVariant,
           width: 0.5,
         ),
       ),
@@ -265,14 +272,17 @@ class _TimelineScreenState extends State<TimelineScreen>
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) =>
-                                    MovieDetailsScreen(movie: item.movie!),
+                                builder:
+                                    (context) =>
+                                        MovieDetailsScreen(movie: item.movie!),
                               ),
                             );
                           },
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
                           ),
                           child: const Text('View Details'),
                         ),
@@ -311,9 +321,7 @@ class _TimelineScreenState extends State<TimelineScreen>
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const ComposePostScreen(),
-            ),
+            MaterialPageRoute(builder: (context) => const ComposePostScreen()),
           ).then((posted) {
             if (posted == true) {
               // If a post was created, refresh the timeline
@@ -333,18 +341,20 @@ class _TimelineScreenState extends State<TimelineScreen>
             SliverToBoxAdapter(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 300),
-                child: _isLoading
-                    ? LinearProgressIndicator(
-                        backgroundColor: colorScheme.surfaceVariant,
-                        color: colorScheme.primary,
-                      )
-                    : const SizedBox(height: 1),
+                child:
+                    _isLoading
+                        ? LinearProgressIndicator(
+                          backgroundColor: colorScheme.surfaceVariant,
+                          color: colorScheme.primary,
+                        )
+                        : const SizedBox(height: 1),
               ),
             ),
             StreamBuilder<List<TimelineItem>?>(
-              stream: _selectedGenre == 'All'
-                  ? _timelineService.getPersonalizedTimeline()
-                  : _timelineService.getGenreTimeline(_selectedGenre),
+              stream:
+                  _selectedGenre == 'All'
+                      ? _timelineService.getPersonalizedTimeline()
+                      : _timelineService.getGenreTimeline(_selectedGenre),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return SliverToBoxAdapter(
@@ -384,8 +394,9 @@ class _TimelineScreenState extends State<TimelineScreen>
 
                 if (!snapshot.hasData) {
                   return const SliverToBoxAdapter(
-                    child:
-                        LoadingIndicator(message: 'Loading your timeline...'),
+                    child: LoadingIndicator(
+                      message: 'Loading your timeline...',
+                    ),
                   );
                 }
 

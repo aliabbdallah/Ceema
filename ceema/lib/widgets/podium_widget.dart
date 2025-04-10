@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/podium_movie.dart';
+import '../models/movie.dart';
+import '../screens/movie_details_screen.dart';
 
 class PodiumWidget extends StatelessWidget {
   final List<PodiumMovie> movies;
@@ -17,11 +19,37 @@ class PodiumWidget extends StatelessWidget {
     this.onRankSwap,
   }) : super(key: key);
 
+  void _handleMovieTap(BuildContext context, PodiumMovie movie) {
+    if (onMovieTap != null) {
+      onMovieTap!(movie);
+    } else {
+      // Convert PodiumMovie to Movie and navigate to details screen
+      final movieDetails = Movie(
+        id: movie.tmdbId,
+        title: movie.title,
+        posterUrl: movie.posterUrl,
+        year: '', // Not available in PodiumMovie
+        overview: '', // Not available in PodiumMovie
+      );
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MovieDetailsScreen(movie: movieDetails),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Sort movies by rank
     final sortedMovies = List<PodiumMovie>.from(movies)
       ..sort((a, b) => a.rank.compareTo(b.rank));
+
+    // Calculate responsive dimensions based on screen width
+    final screenWidth = MediaQuery.of(context).size.width;
+    final podiumWidth = screenWidth * 0.28; // 28% of screen width
+    final podiumHeight = podiumWidth * 1.5; // Maintain aspect ratio
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -39,8 +67,8 @@ class PodiumWidget extends StatelessWidget {
                   child: _buildPodiumStep(
                     context,
                     sortedMovies[1],
-                    height: 190,
-                    width: 124,
+                    height: podiumHeight * 0.9, // 90% of first place height
+                    width: podiumWidth * 0.9, // 90% of first place width
                     color: Colors.grey[300]!,
                     rank: 2,
                     medalColor: Colors.grey[400]!,
@@ -53,8 +81,8 @@ class PodiumWidget extends StatelessWidget {
                   child: _buildPodiumStep(
                     context,
                     sortedMovies[0],
-                    height: 210,
-                    width: 134,
+                    height: podiumHeight,
+                    width: podiumWidth,
                     color: Colors.amber,
                     rank: 1,
                     medalColor: Colors.amber[700]!,
@@ -67,8 +95,8 @@ class PodiumWidget extends StatelessWidget {
                   child: _buildPodiumStep(
                     context,
                     sortedMovies[2],
-                    height: 180,
-                    width: 124,
+                    height: podiumHeight * 0.85, // 85% of first place height
+                    width: podiumWidth * 0.9, // 90% of first place width
                     color: Colors.brown[300]!,
                     rank: 3,
                     medalColor: Colors.brown[400]!,
@@ -99,7 +127,7 @@ class PodiumWidget extends StatelessWidget {
             : const Color(0xFFCD7F32); // Bronze
 
     return GestureDetector(
-      onTap: () => onMovieTap?.call(movie),
+      onTap: () => _handleMovieTap(context, movie),
       child: Column(
         children: [
           Container(
@@ -144,7 +172,7 @@ class PodiumWidget extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           // Movie title
           SizedBox(
             width: width,
@@ -153,11 +181,14 @@ class PodiumWidget extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: width * 0.1, // Responsive font size
+              ),
             ),
           ),
           if (movie.comment != null && movie.comment!.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             // Movie comment
             SizedBox(
               width: width,
@@ -167,7 +198,7 @@ class PodiumWidget extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: width * 0.08, // Responsive font size
                   color: Colors.grey[600],
                   fontStyle: FontStyle.italic,
                 ),
