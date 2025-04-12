@@ -14,11 +14,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
-  final PageController _pageController = PageController();
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
-  int _currentTab = 0;
-  bool _isPageChanging = false;
   bool _isInitializing = true;
   final _auth = FirebaseAuth.instance;
 
@@ -44,42 +41,12 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   void dispose() {
-    _pageController.dispose();
     _animationController.dispose();
     super.dispose();
   }
 
-  void _changePage(int index) {
-    if (_currentTab == index) return;
-
-    setState(() {
-      _isPageChanging = true;
-    });
-
-    _animationController.reverse().then((_) {
-      _pageController.jumpToPage(index);
-      setState(() {
-        _currentTab = index;
-      });
-      _animationController.forward().then((_) {
-        setState(() {
-          _isPageChanging = false;
-        });
-      });
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final currentUser = _auth.currentUser;
-    final List<Widget> screens = [
-      const SeamlessFeedScreen(),
-      const DiaryScreen(),
-      WatchlistScreen(userId: currentUser?.uid ?? '', isCurrentUser: true),
-      ProfileScreen(userId: currentUser?.uid ?? '', isCurrentUser: true),
-    ];
-
     return Scaffold(
       // Show loading indicator if preferences are being initialized
       body:
@@ -96,55 +63,8 @@ class _HomeScreenState extends State<HomeScreen>
               )
               : FadeTransition(
                 opacity: _fadeAnimation,
-                child: PageView(
-                  controller: _pageController,
-                  physics:
-                      _isPageChanging
-                          ? const NeverScrollableScrollPhysics()
-                          : const NeverScrollableScrollPhysics(), // Disable swipe to change tabs
-                  onPageChanged: (index) {
-                    if (!_isPageChanging) {
-                      setState(() => _currentTab = index);
-                    }
-                  },
-                  children: screens,
-                ),
+                child: const SeamlessFeedScreen(),
               ),
-      bottomNavigationBar: NavigationBar(
-        elevation: 0,
-        backgroundColor: colorScheme.surface,
-        indicatorColor: colorScheme.primaryContainer,
-        selectedIndex: _currentTab,
-        labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
-        animationDuration: const Duration(milliseconds: 300),
-        onDestinationSelected: _changePage,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-            tooltip: 'Home Feed',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.book_outlined),
-            selectedIcon: Icon(Icons.book),
-            label: 'Diary',
-            tooltip: 'Movie Diary',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.bookmark_outline),
-            selectedIcon: Icon(Icons.bookmark),
-            label: 'Watchlist',
-            tooltip: 'Movie Watchlist',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Profile',
-            tooltip: 'Your Profile',
-          ),
-        ],
-      ),
     );
   }
 }

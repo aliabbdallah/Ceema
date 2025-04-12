@@ -1,0 +1,170 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../home/screens/home_screen.dart';
+import '../screens/diary_screen.dart';
+import '../screens/profile_screen.dart';
+import '../screens/watchlist_screen.dart';
+import '../screens/search_screen.dart';
+import 'navigation_service.dart';
+
+class AppNavigator extends StatefulWidget {
+  const AppNavigator({Key? key}) : super(key: key);
+
+  @override
+  _AppNavigatorState createState() => _AppNavigatorState();
+}
+
+class _AppNavigatorState extends State<AppNavigator> {
+  final PageController _pageController = PageController();
+  int _currentTab = 0;
+  bool _isPageChanging = false;
+  final _auth = FirebaseAuth.instance;
+  final _navigatorKeys = [
+    GlobalKey<NavigatorState>(),
+    GlobalKey<NavigatorState>(),
+    GlobalKey<NavigatorState>(),
+    GlobalKey<NavigatorState>(),
+    GlobalKey<NavigatorState>(),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    NavigationService().setNavigatorKeys(_navigatorKeys);
+  }
+
+  void _changePage(int index) {
+    if (_currentTab == index) return;
+
+    setState(() {
+      _isPageChanging = true;
+      _currentTab = index;
+      _pageController.jumpToPage(index);
+      _isPageChanging = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final currentUser = _auth.currentUser;
+
+    return WillPopScope(
+      onWillPop: () async {
+        final isFirstRouteInCurrentTab =
+            !await _navigatorKeys[_currentTab].currentState!.maybePop();
+        if (isFirstRouteInCurrentTab) {
+          if (_currentTab != 0) {
+            _changePage(0);
+            return false;
+          }
+        }
+        return isFirstRouteInCurrentTab;
+      },
+      child: Scaffold(
+        body: PageView(
+          controller: _pageController,
+          physics: const NeverScrollableScrollPhysics(),
+          onPageChanged: (index) {
+            if (!_isPageChanging) {
+              setState(() => _currentTab = index);
+            }
+          },
+          children: [
+            Navigator(
+              key: _navigatorKeys[0],
+              onGenerateRoute:
+                  (settings) => MaterialPageRoute(
+                    builder: (context) => const HomeScreen(),
+                  ),
+            ),
+            Navigator(
+              key: _navigatorKeys[1],
+              onGenerateRoute:
+                  (settings) => MaterialPageRoute(
+                    builder: (context) => const SearchScreen(),
+                  ),
+            ),
+            Navigator(
+              key: _navigatorKeys[2],
+              onGenerateRoute:
+                  (settings) => MaterialPageRoute(
+                    builder: (context) => const DiaryScreen(),
+                  ),
+            ),
+            Navigator(
+              key: _navigatorKeys[3],
+              onGenerateRoute:
+                  (settings) => MaterialPageRoute(
+                    builder:
+                        (context) => WatchlistScreen(
+                          userId: currentUser?.uid ?? '',
+                          isCurrentUser: true,
+                        ),
+                  ),
+            ),
+            Navigator(
+              key: _navigatorKeys[4],
+              onGenerateRoute:
+                  (settings) => MaterialPageRoute(
+                    builder:
+                        (context) => ProfileScreen(
+                          userId: currentUser?.uid ?? '',
+                          isCurrentUser: true,
+                        ),
+                  ),
+            ),
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          elevation: 2,
+          backgroundColor: colorScheme.surface.withOpacity(0.10),
+          indicatorColor: colorScheme.secondary,
+          selectedIndex: _currentTab,
+          labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
+          animationDuration: const Duration(milliseconds: 300),
+          onDestinationSelected: _changePage,
+          height: 64,
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home),
+              label: 'Home',
+              tooltip: 'Home Feed',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.search_outlined),
+              selectedIcon: Icon(Icons.search),
+              label: 'Search',
+              tooltip: 'Search Movies',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.book_outlined),
+              selectedIcon: Icon(Icons.book),
+              label: 'Diary',
+              tooltip: 'Movie Diary',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.bookmark_outline),
+              selectedIcon: Icon(Icons.bookmark),
+              label: 'Watchlist',
+              tooltip: 'Movie Watchlist',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'Profile',
+              tooltip: 'Your Profile',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

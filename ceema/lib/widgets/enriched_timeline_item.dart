@@ -28,9 +28,10 @@ class EnrichedTimelineItem extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: item.relevanceScore > 0.7
-              ? itemColor.withOpacity(0.5)
-              : colorScheme.outlineVariant,
+          color:
+              item.relevanceScore > 0.7
+                  ? itemColor.withOpacity(0.5)
+                  : colorScheme.outlineVariant,
           width: item.relevanceScore > 0.7 ? 1 : 0.5,
         ),
       ),
@@ -50,11 +51,7 @@ class EnrichedTimelineItem extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(
-                    item.getIcon(),
-                    size: 16,
-                    color: itemColor,
-                  ),
+                  Icon(item.getIcon(), size: 16, color: itemColor),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -92,8 +89,6 @@ class EnrichedTimelineItem extends StatelessWidget {
       case TimelineItemType.friendRating:
       case TimelineItemType.friendWatched:
         return _buildUserActivityContent(context);
-      default:
-        return _buildDefaultContent(context);
     }
   }
 
@@ -110,10 +105,11 @@ class EnrichedTimelineItem extends StatelessWidget {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => UserProfileScreen(
-                  userId: post.userId,
-                  username: post.userName,
-                ),
+                builder:
+                    (context) => UserProfileScreen(
+                      userId: post.userId,
+                      username: post.userName,
+                    ),
               ),
             );
           },
@@ -152,10 +148,7 @@ class EnrichedTimelineItem extends StatelessWidget {
         const SizedBox(height: 12),
 
         // Post text content
-        Text(
-          post.content,
-          style: const TextStyle(fontSize: 15),
-        ),
+        Text(post.content, style: const TextStyle(fontSize: 15)),
 
         // Movie info (if available)
         if (post.movieId.isNotEmpty) ...[
@@ -179,11 +172,7 @@ class EnrichedTimelineItem extends StatelessWidget {
           padding: const EdgeInsets.only(top: 16),
           child: Row(
             children: [
-              Icon(
-                Icons.favorite,
-                size: 16,
-                color: Colors.red[400],
-              ),
+              Icon(Icons.favorite, size: 16, color: Colors.red[400]),
               const SizedBox(width: 4),
               Text(
                 post.likes.length.toString(),
@@ -215,19 +204,13 @@ class EnrichedTimelineItem extends StatelessWidget {
     final Movie? movie = item.movie;
     if (movie == null) return _buildDefaultContent(context);
 
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Movie Type Label (Recommendation, Trending, etc)
         Row(
           children: [
-            Icon(
-              item.getIcon(),
-              color: item.getColor(context),
-              size: 20,
-            ),
+            Icon(item.getIcon(), color: item.getColor(context), size: 20),
             const SizedBox(width: 8),
             Text(
               item.getDescription(),
@@ -303,9 +286,7 @@ class EnrichedTimelineItem extends StatelessWidget {
                       text: userName,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    TextSpan(
-                      text: ' ${item.getDescription()} ',
-                    ),
+                    TextSpan(text: ' ${item.getDescription()} '),
                     TextSpan(
                       text: movieTitle,
                       style: const TextStyle(fontWeight: FontWeight.bold),
@@ -323,24 +304,12 @@ class EnrichedTimelineItem extends StatelessWidget {
           Row(
             children: [
               ...List.generate(5, (index) {
-                if (index < rating!.floor()) {
-                  return Icon(
-                    Icons.star,
-                    color: Colors.amber,
-                    size: 20,
-                  );
+                if (index < rating.floor()) {
+                  return Icon(Icons.star, color: Colors.amber, size: 20);
                 } else if (index == rating.floor() && rating % 1 > 0) {
-                  return Icon(
-                    Icons.star_half,
-                    color: Colors.amber,
-                    size: 20,
-                  );
+                  return Icon(Icons.star_half, color: Colors.amber, size: 20);
                 } else {
-                  return Icon(
-                    Icons.star_border,
-                    color: Colors.amber,
-                    size: 20,
-                  );
+                  return Icon(Icons.star_border, color: Colors.amber, size: 20);
                 }
               }),
               const SizedBox(width: 8),
@@ -364,10 +333,7 @@ class EnrichedTimelineItem extends StatelessWidget {
           alignment: Alignment.bottomRight,
           child: Text(
             timeago.format(item.timestamp),
-            style: TextStyle(
-              color: colorScheme.onSurfaceVariant,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
           ),
         ),
       ],
@@ -379,10 +345,7 @@ class EnrichedTimelineItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Timeline Update',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
+        Text('Timeline Update', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         Text(
           item.data.toString(),
@@ -392,8 +355,13 @@ class EnrichedTimelineItem extends StatelessWidget {
     );
   }
 
-  Widget _buildMovieCard(BuildContext context, Movie movie,
-      {bool isLarge = false, bool showRating = false, double rating = 0.0}) {
+  Widget _buildMovieCard(
+    BuildContext context,
+    Movie movie, {
+    bool isLarge = false,
+    bool showRating = false,
+    double rating = 0.0,
+  }) {
     return GestureDetector(
       onTap: () {
         Navigator.push(

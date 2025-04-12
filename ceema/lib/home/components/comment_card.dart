@@ -27,8 +27,12 @@ class CommentCard extends StatefulWidget {
 class _CommentCardState extends State<CommentCard> {
   final PostService _postService = PostService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  bool _isLiked = false;
   List<String> _likes = [];
+  bool _isUpdating = false;
+  DateTime? _lastUpdateTime; // Track last update time for rate limiting
+  static const Duration _updateCooldown = Duration(
+    milliseconds: 500,
+  ); // Rate limiting
 
   @override
   void initState() {
@@ -38,7 +42,6 @@ class _CommentCardState extends State<CommentCard> {
 
   void _updateLikes() {
     _likes = List<String>.from(widget.comment['likes'] ?? []);
-    _isLiked = _likes.contains(_auth.currentUser?.uid);
   }
 
   @override
@@ -50,30 +53,53 @@ class _CommentCardState extends State<CommentCard> {
   }
 
   Future<void> _handleLike() async {
-    if (_auth.currentUser == null) return;
+    if (_auth.currentUser == null || _isUpdating) return;
+
+    // Rate limiting check
+    if (_lastUpdateTime != null &&
+        DateTime.now().difference(_lastUpdateTime!) < _updateCooldown) {
+      return;
+    }
+
+    setState(() {
+      _isUpdating = true;
+      _lastUpdateTime = DateTime.now();
+      if (_likes.contains(_auth.currentUser!.uid)) {
+        _likes.remove(_auth.currentUser!.uid);
+      } else {
+        _likes.add(_auth.currentUser!.uid);
+      }
+    });
 
     try {
+      // Batch the update with other pending operations if any
       await _postService.toggleCommentLike(
         widget.comment['id'],
         widget.comment['postId'],
         _auth.currentUser!.uid,
       );
-      setState(() {
-        if (_isLiked) {
-          _likes.remove(_auth.currentUser!.uid);
-        } else {
-          _likes.add(_auth.currentUser!.uid);
-        }
-        _isLiked = !_isLiked;
-      });
     } catch (e) {
+      // Revert optimistic update on failure
       if (mounted) {
+        setState(() {
+          if (_likes.contains(_auth.currentUser!.uid)) {
+            _likes.remove(_auth.currentUser!.uid);
+          } else {
+            _likes.add(_auth.currentUser!.uid);
+          }
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error updating like: $e'),
             backgroundColor: Colors.red,
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdating = false;
+        });
       }
     }
   }
@@ -338,10 +364,12 @@ class _CommentCardState extends State<CommentCard> {
                       const SizedBox(width: 16),
                       LikeButton(
                         size: 20,
-                        isLiked: _isLiked,
+                        isLiked: _likes.contains(_auth.currentUser?.uid),
                         likeCount: _likes.length,
                         onTap: (isLiked) async {
-                          await _handleLike();
+                          if (!_isUpdating) {
+                            await _handleLike();
+                          }
                           return !isLiked;
                         },
                         likeBuilder: (bool isLiked) {
@@ -375,6 +403,20 @@ class _CommentCardState extends State<CommentCard> {
                             ),
                           );
                         },
+                        animationDuration: const Duration(milliseconds: 1000),
+                        bubblesColor: const BubblesColor(
+                          dotPrimaryColor: Colors.red,
+                          dotSecondaryColor: Colors.redAccent,
+                        ),
+                        circleColor: const CircleColor(
+                          start: Colors.red,
+                          end: Colors.redAccent,
+                        ),
+                        bubblesSize: 6.0,
+                        circleSize: 20.0,
+                        likeCountAnimationType: LikeCountAnimationType.part,
+                        likeCountPadding: const EdgeInsets.only(left: 3.0),
+                        mainAxisAlignment: MainAxisAlignment.start,
                       ),
                       if (widget.showReplyButton) ...[
                         const SizedBox(width: 16),

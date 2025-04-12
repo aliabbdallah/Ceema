@@ -5,10 +5,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
-import 'package:ceema/home/screens/home_screen.dart';
 import 'screens/sign_in_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/theme_service.dart';
+import 'services/profile_service.dart';
+import 'navigation/app_navigator.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +22,13 @@ void main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
+  // Update watched count for current user if logged in
+  final currentUser = FirebaseAuth.instance.currentUser;
+  if (currentUser != null) {
+    final profileService = ProfileService();
+    await profileService.updateUserFriendStats(currentUser.uid);
+  }
 
   runApp(
     ChangeNotifierProvider(
@@ -92,7 +100,7 @@ class MyApp extends StatelessWidget {
 
             // Check and update email verification status in Firestore
             _updateEmailVerificationStatus(snapshot.data!);
-            return const HomeScreen();
+            return const AppNavigator();
           }
 
           return const SignInScreen();

@@ -16,6 +16,7 @@ class UserModel {
   final int watchlistCount;
   final int movieCount;
   final bool emailVerified;
+  final int watchedCount;
   final List<PodiumMovie> podiumMovies;
 
   UserModel({
@@ -33,6 +34,7 @@ class UserModel {
     this.watchlistCount = 0,
     this.movieCount = 0,
     this.emailVerified = false,
+    this.watchedCount = 0,
     this.podiumMovies = const [],
   });
 
@@ -52,6 +54,7 @@ class UserModel {
       watchlistCount: json['watchlistCount'] ?? 0,
       movieCount: json['movieCount'] ?? 0,
       emailVerified: json['emailVerified'] ?? false,
+      watchedCount: json['watchedCount'] ?? 0,
       podiumMovies:
           (json['podiumMovies'] as List?)
               ?.map((movie) => PodiumMovie.fromJson(movie))
@@ -75,6 +78,7 @@ class UserModel {
       'watchlistCount': watchlistCount,
       'movieCount': movieCount,
       'emailVerified': emailVerified,
+      'watchedCount': watchedCount,
       'podiumMovies': podiumMovies.map((movie) => movie.toJson()).toList(),
     };
   }
@@ -93,6 +97,7 @@ class UserModel {
     int? watchlistCount,
     int? movieCount,
     bool? emailVerified,
+    int? watchedCount,
     List<PodiumMovie>? podiumMovies,
   }) {
     return UserModel(
@@ -110,6 +115,7 @@ class UserModel {
       watchlistCount: watchlistCount ?? this.watchlistCount,
       movieCount: movieCount ?? this.movieCount,
       emailVerified: emailVerified ?? this.emailVerified,
+      watchedCount: watchedCount ?? this.watchedCount,
       podiumMovies: podiumMovies ?? this.podiumMovies,
     );
   }

@@ -134,32 +134,32 @@ class ProfileService {
 
   // Update user stats after friend actions
   Future<void> updateUserFriendStats(String userId) async {
-    final followersCount =
-        await _firestore
-            .collection('follows')
-            .where('followedId', isEqualTo: userId)
-            .count()
-            .get();
+    // Get unique watched movies count
+    final Set<String> uniqueMovieIds = {};
 
-    final followingCount =
+    // Add movies from diary entries
+    final diaryEntries =
         await _firestore
-            .collection('follows')
-            .where('followerId', isEqualTo: userId)
-            .count()
+            .collection('diary_entries')
+            .where('userId', isEqualTo: userId)
             .get();
+    for (var doc in diaryEntries.docs) {
+      uniqueMovieIds.add(doc.data()['movieId']);
+    }
 
-    final mutualCount =
+    // Add movies from direct ratings
+    final directRatings =
         await _firestore
-            .collection('follows')
-            .where('followerId', isEqualTo: userId)
-            .where('isMutual', isEqualTo: true)
-            .count()
+            .collection('movie_ratings')
+            .where('userId', isEqualTo: userId)
             .get();
+    for (var doc in directRatings.docs) {
+      uniqueMovieIds.add(doc.data()['movieId']);
+    }
 
+    // Update the watched count
     await _firestore.collection('users').doc(userId).update({
-      'followersCount': followersCount.count,
-      'followingCount': followingCount.count,
-      'mutualFriendsCount': mutualCount.count,
+      'watchedCount': uniqueMovieIds.length,
     });
   }
 

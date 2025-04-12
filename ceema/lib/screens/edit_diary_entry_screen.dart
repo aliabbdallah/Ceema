@@ -106,18 +106,44 @@ class _EditDiaryEntryScreenState extends State<EditDiaryEntryScreen> {
               children: [
                 const Text('Rating: '),
                 const SizedBox(width: 8),
-                ...List.generate(5, (index) {
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _rating = index + 1.0;
-                      });
-                    },
-                    child: Icon(
-                      index < _rating ? Icons.star : Icons.star_border,
-                      color: Colors.amber,
-                    ),
-                  );
+                ...List.generate(_rating.ceil(), (index) {
+                  if (index < _rating.floor()) {
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _rating = index + 1.0;
+                        });
+                      },
+                      child: Icon(
+                        Icons.star,
+                        color: Theme.of(context).colorScheme.secondary,
+                      ),
+                    );
+                  } else if (index == _rating.floor() && _rating % 1 >= 0.5) {
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _rating = index + 0.5;
+                        });
+                      },
+                      child: Icon(
+                        Icons.star_half,
+                        color: Theme.of(context).colorScheme.secondary,
+                      ),
+                    );
+                  } else {
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _rating = index + 1.0;
+                        });
+                      },
+                      child: Icon(
+                        Icons.star_outlined,
+                        color: Theme.of(context).colorScheme.secondary,
+                      ),
+                    );
+                  }
                 }),
               ],
             ),

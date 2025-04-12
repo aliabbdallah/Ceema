@@ -11,11 +11,8 @@ class DiaryEntryForm extends StatefulWidget {
   final Movie movie;
   final DiaryEntry? existingEntry; // Optional, for editing existing entries
 
-  const DiaryEntryForm({
-    Key? key,
-    required this.movie,
-    this.existingEntry,
-  }) : super(key: key);
+  const DiaryEntryForm({Key? key, required this.movie, this.existingEntry})
+    : super(key: key);
 
   @override
   _DiaryEntryFormState createState() => _DiaryEntryFormState();
@@ -140,10 +137,7 @@ class _DiaryEntryFormState extends State<DiaryEntryForm> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -186,7 +180,8 @@ class _DiaryEntryFormState extends State<DiaryEntryForm> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-            widget.existingEntry != null ? 'Edit Diary Entry' : 'Add to Diary'),
+          widget.existingEntry != null ? 'Edit Diary Entry' : 'Add to Diary',
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -251,9 +246,7 @@ class _DiaryEntryFormState extends State<DiaryEntryForm> {
               // Watch date
               ListTile(
                 title: const Text('Watch Date'),
-                subtitle: Text(
-                  DateFormat('MMMM d, yyyy').format(_watchedDate),
-                ),
+                subtitle: Text(DateFormat('MMMM d, yyyy').format(_watchedDate)),
                 trailing: const Icon(Icons.calendar_today),
                 onTap: () => _selectDate(context),
               ),
@@ -306,21 +299,23 @@ class _DiaryEntryFormState extends State<DiaryEntryForm> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
+                child:
+                    _isLoading
+                        ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                        : Text(
+                          widget.existingEntry != null
+                              ? 'Update Entry'
+                              : 'Add to Diary',
                         ),
-                      )
-                    : Text(
-                        widget.existingEntry != null
-                            ? 'Update Entry'
-                            : 'Add to Diary',
-                      ),
               ),
             ],
           ),

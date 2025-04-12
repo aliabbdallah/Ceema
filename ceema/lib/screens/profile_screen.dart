@@ -9,13 +9,9 @@ import '../models/user.dart';
 import '../models/diary_entry.dart';
 import '../models/movie.dart';
 import 'profile_edit_screen.dart';
-import '../screens/friends_screen.dart';
 import 'settings_screen.dart';
 import '../screens/watchlist_screen.dart';
-import '../screens/friend_request_screen.dart';
 import '../widgets/profile_image_widget.dart';
-import '../services/follow_service.dart';
-import '../widgets/follow_button.dart';
 import 'followers_screen.dart';
 import 'following_screen.dart';
 import 'follow_requests_screen.dart';
@@ -25,6 +21,7 @@ import 'package:intl/intl.dart';
 import 'podium_edit_screen.dart';
 import '../widgets/podium_widget.dart';
 import '../screens/movie_details_screen.dart';
+import 'watched_movies_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String userId;
@@ -233,12 +230,12 @@ class _ProfileScreenState extends State<ProfileScreen>
   Widget _buildProfileStats(UserModel user) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 InkWell(
                   onTap:
@@ -279,61 +276,78 @@ class _ProfileScreenState extends State<ProfileScreen>
                   },
                   child: _buildStatColumn('Watchlist', user.watchlistCount),
                 ),
+                InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (context) => WatchedMoviesScreen(
+                              userId: widget.userId,
+                              isCurrentUser: widget.isCurrentUser,
+                            ),
+                      ),
+                    );
+                  },
+                  child: _buildStatColumn('Watched', user.watchedCount),
+                ),
               ],
             ),
-            if (user.podiumMovies.isNotEmpty) ...[
-              const Divider(),
-              const SizedBox(height: 16),
-              PodiumWidget(
-                movies: user.podiumMovies,
-                isEditable: widget.isCurrentUser,
-                onMovieTap: (movie) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder:
-                          (context) => MovieDetailsScreen(
-                            movie: Movie(
-                              id: movie.tmdbId,
-                              title: movie.title,
-                              posterUrl: movie.posterUrl,
-                              year: '', // We'll get this from the API
-                              overview: '', // We'll get this from the API
+          ),
+          if (user.podiumMovies.isNotEmpty || widget.isCurrentUser) ...[
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child:
+                  user.podiumMovies.isNotEmpty
+                      ? PodiumWidget(
+                        movies: user.podiumMovies,
+                        isEditable: widget.isCurrentUser,
+                        onMovieTap: (movie) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (context) => MovieDetailsScreen(
+                                    movie: Movie(
+                                      id: movie.tmdbId,
+                                      title: movie.title,
+                                      posterUrl: movie.posterUrl,
+                                      year: '',
+                                      overview: '',
+                                    ),
+                                  ),
                             ),
-                          ),
-                    ),
-                  );
-                },
-                onRankTap:
-                    widget.isCurrentUser
-                        ? (rank) {
+                          );
+                        },
+                        onRankTap:
+                            widget.isCurrentUser
+                                ? (rank) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder:
+                                          (context) => const PodiumEditScreen(),
+                                    ),
+                                  );
+                                }
+                                : null,
+                      )
+                      : ElevatedButton.icon(
+                        icon: const Icon(Icons.add),
+                        label: const Text('Create Your Podium'),
+                        onPressed: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => const PodiumEditScreen(),
                             ),
                           );
-                        }
-                        : null,
-              ),
-            ] else if (widget.isCurrentUser) ...[
-              const Divider(),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('Create Your Podium'),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const PodiumEditScreen(),
-                    ),
-                  );
-                },
-              ),
-            ],
+                        },
+                      ),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -396,10 +410,13 @@ class _ProfileScreenState extends State<ProfileScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading:
+            widget.isCurrentUser
+                ? null
+                : IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => Navigator.pop(context),
+                ),
         actions: [
           if (widget.isCurrentUser) ...[
             IconButton(
@@ -497,6 +514,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                         });
                       },
                       tabs: const [Tab(text: 'Posts'), Tab(text: 'Diary')],
+                      labelColor: Theme.of(context).colorScheme.secondary,
+                      unselectedLabelColor: Theme.of(
+                        context,
+                      ).colorScheme.secondary.withOpacity(0.5),
+                      indicatorColor: Theme.of(context).colorScheme.secondary,
                     ),
                     const SizedBox(height: 16),
                     _selectedTab == 'posts'

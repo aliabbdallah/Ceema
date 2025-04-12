@@ -23,6 +23,9 @@ import '../widgets/podium_widget.dart';
 import '../screens/podium_edit_screen.dart';
 import '../models/movie.dart';
 import '../screens/movie_details_screen.dart';
+import 'watched_movies_screen.dart';
+import '../services/dm_service.dart';
+import 'conversation_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String userId;
@@ -92,6 +95,37 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       print('Error checking pending request: $e');
       return null;
     }
+  }
+
+  Widget _buildMessageButton() {
+    if (_auth.currentUser!.uid == widget.userId) {
+      return Container();
+    }
+
+    return IconButton(
+      icon: const Icon(Icons.chat_bubble_outline),
+      tooltip: 'Message',
+      onPressed: () async {
+        final dmService = DMService();
+        final conversationId = await dmService.createConversation(
+          widget.userId,
+        );
+
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (context) => ConversationScreen(
+                    conversationId: conversationId,
+                    otherUserId: widget.userId,
+                    otherUsername: widget.username,
+                  ),
+            ),
+          );
+        }
+      },
+    );
   }
 
   Widget _buildFollowButton() {
@@ -242,105 +276,65 @@ class _UserProfileScreenState extends State<UserProfileScreen>
       margin: const EdgeInsets.symmetric(horizontal: 16),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                InkWell(
-                  onTap:
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (context) =>
-                                  FollowingScreen(targetUserId: widget.userId),
-                        ),
-                      ),
-                  child: _buildStatItem('Following', user.followingCount),
-                ),
-                InkWell(
-                  onTap:
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (context) =>
-                                  FollowersScreen(targetUserId: widget.userId),
-                        ),
-                      ),
-                  child: _buildStatItem('Followers', user.followersCount),
-                ),
-                InkWell(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (context) => WatchlistScreen(
-                              userId: widget.userId,
-                              isCurrentUser:
-                                  _auth.currentUser?.uid == widget.userId,
-                            ),
-                      ),
-                    );
-                  },
-                  child: _buildStatItem('Watchlist', user.watchlistCount),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (user.podiumMovies.isNotEmpty) ...[
-              const Divider(),
-              const SizedBox(height: 16),
-              PodiumWidget(
-                movies: user.podiumMovies,
-                isEditable: _auth.currentUser?.uid == widget.userId,
-                onMovieTap: (movie) {
-                  Navigator.push(
+            InkWell(
+              onTap:
+                  () => Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder:
-                          (context) => MovieDetailsScreen(
-                            movie: Movie(
-                              id: movie.tmdbId,
-                              title: movie.title,
-                              posterUrl: movie.posterUrl,
-                              year: '', // We'll get this from the API
-                              overview: '', // We'll get this from the API
-                            ),
-                          ),
+                          (context) =>
+                              FollowingScreen(targetUserId: widget.userId),
                     ),
-                  );
-                },
-                onRankTap:
-                    _auth.currentUser?.uid == widget.userId
-                        ? (rank) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const PodiumEditScreen(),
-                            ),
-                          );
-                        }
-                        : null,
-              ),
-            ] else if (_auth.currentUser?.uid == widget.userId) ...[
-              const Divider(),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('Create Your Podium'),
-                onPressed: () {
-                  Navigator.push(
+                  ),
+              child: _buildStatItem('Following', user.followingCount),
+            ),
+            InkWell(
+              onTap:
+                  () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const PodiumEditScreen(),
+                      builder:
+                          (context) =>
+                              FollowersScreen(targetUserId: widget.userId),
                     ),
-                  );
-                },
-              ),
-            ],
+                  ),
+              child: _buildStatItem('Followers', user.followersCount),
+            ),
+            InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => WatchlistScreen(
+                          userId: widget.userId,
+                          isCurrentUser:
+                              _auth.currentUser?.uid == widget.userId,
+                        ),
+                  ),
+                );
+              },
+              child: _buildStatItem('Watchlist', user.watchlistCount),
+            ),
+            InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => WatchedMoviesScreen(
+                          userId: widget.userId,
+                          isCurrentUser:
+                              _auth.currentUser?.uid == widget.userId,
+                        ),
+                  ),
+                );
+              },
+              child: _buildStatItem('Watched', user.watchedCount ?? 0),
+            ),
           ],
         ),
       ),
@@ -612,6 +606,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                         );
                       },
                     ),
+                  _buildMessageButton(),
                   _buildFollowButton(),
                 ],
                 flexibleSpace: FlexibleSpaceBar(
@@ -682,6 +677,11 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                     TabBar(
                       controller: _tabController,
                       tabs: const [Tab(text: 'Posts'), Tab(text: 'Diary')],
+                      labelColor: Theme.of(context).colorScheme.secondary,
+                      unselectedLabelColor: Theme.of(
+                        context,
+                      ).colorScheme.secondary.withOpacity(0.5),
+                      indicatorColor: Theme.of(context).colorScheme.secondary,
                     ),
                     const SizedBox(height: 16),
                     _selectedTab == 'posts'

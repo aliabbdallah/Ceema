@@ -14,6 +14,8 @@ import '../widgets/star_rating.dart';
 import 'diary_entry_form.dart';
 import 'package:flutter/rendering.dart';
 import 'actor_details_screen.dart';
+import '../services/movie_rating_service.dart';
+import '../services/profile_service.dart';
 
 class MovieDetailsScreen extends StatefulWidget {
   final Movie movie;
@@ -30,6 +32,8 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final WatchlistService _watchlistService = WatchlistService();
   final DiaryService _diaryService = DiaryService();
+  final MovieRatingService _movieRatingService = MovieRatingService();
+  final ProfileService _profileService = ProfileService();
   late ScrollController _scrollController;
   late AnimationController _ratingAnimationController;
   late TabController _tabController;
@@ -134,7 +138,23 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
 
   Future<void> _checkUserRating() async {
     try {
-      // Check if user has already rated this movie in their diary
+      // First check if user has a direct rating
+      final directRating = await _movieRatingService.getRating(
+        _auth.currentUser!.uid,
+        widget.movie.id,
+      );
+
+      if (directRating != null) {
+        if (mounted) {
+          setState(() {
+            _userRating = directRating;
+            _hasRated = true;
+          });
+        }
+        return;
+      }
+
+      // If no direct rating, check diary entries
       final querySnapshot =
           await _firestore
               .collection('diary_entries')
@@ -164,33 +184,15 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
     });
 
     try {
-      // Check if user already has a diary entry for this movie
-      final querySnapshot =
-          await _firestore
-              .collection('diary_entries')
-              .where('userId', isEqualTo: _auth.currentUser!.uid)
-              .where('movieId', isEqualTo: widget.movie.id)
-              .limit(1)
-              .get();
+      // Save the rating directly
+      await _movieRatingService.addOrUpdateRating(
+        userId: _auth.currentUser!.uid,
+        movie: widget.movie,
+        rating: rating,
+      );
 
-      if (querySnapshot.docs.isNotEmpty) {
-        // Update existing entry
-        await _diaryService.updateDiaryEntry(
-          querySnapshot.docs.first.id,
-          rating: rating,
-        );
-      } else {
-        // Create a new diary entry with just the rating
-        await _diaryService.addDiaryEntry(
-          userId: _auth.currentUser!.uid,
-          movie: widget.movie,
-          rating: rating,
-          review: '',
-          watchedDate: DateTime.now(),
-          isFavorite: false,
-          isRewatch: false,
-        );
-      }
+      // Update watched count in profile
+      await _profileService.updateUserFriendStats(_auth.currentUser!.uid);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -506,9 +508,20 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                       onPressed: _toggleWatchlist,
                       icon: Icon(
                         _isInWatchlist ? Icons.bookmark : Icons.bookmark_border,
+                        color: Theme.of(context).colorScheme.onSecondary,
                       ),
                       label: Text(
                         _isInWatchlist ? 'In Watchlist' : 'Add to Watchlist',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSecondary,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            Theme.of(context).colorScheme.secondary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -582,10 +595,6 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
   Widget _buildRatingSection() {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
-      ),
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -600,72 +609,153 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               if (_hasRated)
-                TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (context) => DiaryEntryForm(movie: widget.movie),
-                      ),
-                    );
+                TextButton.icon(
+                  onPressed: () async {
+                    try {
+                      // Remove the rating
+                      final querySnapshot =
+                          await _firestore
+                              .collection('movie_ratings')
+                              .where(
+                                'userId',
+                                isEqualTo: _auth.currentUser!.uid,
+                              )
+                              .where('movieId', isEqualTo: widget.movie.id)
+                              .limit(1)
+                              .get();
+
+                      if (querySnapshot.docs.isNotEmpty) {
+                        await _firestore
+                            .collection('movie_ratings')
+                            .doc(querySnapshot.docs.first.id)
+                            .delete();
+                      }
+
+                      // Remove from diary entries if exists
+                      final diaryQuerySnapshot =
+                          await _firestore
+                              .collection('diary_entries')
+                              .where(
+                                'userId',
+                                isEqualTo: _auth.currentUser!.uid,
+                              )
+                              .where('movieId', isEqualTo: widget.movie.id)
+                              .limit(1)
+                              .get();
+
+                      if (diaryQuerySnapshot.docs.isNotEmpty) {
+                        await _firestore
+                            .collection('diary_entries')
+                            .doc(diaryQuerySnapshot.docs.first.id)
+                            .delete();
+                      }
+
+                      // Update watched count in profile
+                      await _profileService.updateUserFriendStats(
+                        _auth.currentUser!.uid,
+                      );
+
+                      setState(() {
+                        _userRating = 0.0;
+                        _hasRated = false;
+                      });
+
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Movie removed from watched list'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error removing movie: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
                   },
-                  child: const Text('Add Review'),
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: const Text('Remove'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.red[700],
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
                 ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Center(
-            child: StarRating(
-              rating: _userRating,
-              size: 36,
-              allowHalfRating: true,
-              spacing: 8,
-              onRatingChanged: (rating) {
-                setState(() {
-                  _userRating = rating;
-                });
-              },
+            child: Column(
+              children: [
+                StarRating(
+                  rating: _userRating,
+                  size: 36,
+                  allowHalfRating: true,
+                  spacing: 8,
+                  onRatingChanged: (rating) {
+                    setState(() {
+                      _userRating = rating;
+                    });
+                  },
+                ),
+                const SizedBox(height: 8),
+                if (_userRating > 0)
+                  Text(
+                    _userRating == 5
+                        ? 'Masterpiece!'
+                        : _userRating >= 4
+                        ? 'Loved it!'
+                        : _userRating >= 3
+                        ? 'Liked it'
+                        : _userRating >= 2
+                        ? 'It was OK'
+                        : 'Not for me',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color:
+                          _userRating >= 4
+                              ? Colors.green
+                              : _userRating >= 3
+                              ? Colors.blue
+                              : _userRating >= 2
+                              ? Colors.orange
+                              : Colors.red[700],
+                    ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
           Center(
             child: ElevatedButton(
-              onPressed: () {
-                _saveRating(_userRating);
-                _ratingAnimationController.forward(from: 0.0);
-              },
-              child: const Text('Save Rating'),
+              onPressed:
+                  _userRating > 0
+                      ? () {
+                        _saveRating(_userRating);
+                        _ratingAnimationController.forward(from: 0.0);
+                      }
+                      : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.secondary,
+                foregroundColor: Theme.of(context).colorScheme.onSecondary,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                elevation: 2,
+              ),
+              child: Text(_hasRated ? 'Update Rating' : 'Save Rating'),
             ),
           ),
-          if (_hasRated) ...[
-            const SizedBox(height: 16),
-            Center(
-              child: Text(
-                _userRating == 5
-                    ? 'Masterpiece!'
-                    : _userRating >= 4
-                    ? 'Loved it!'
-                    : _userRating >= 3
-                    ? 'Liked it'
-                    : _userRating >= 2
-                    ? 'It was OK'
-                    : 'Not for me',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color:
-                      _userRating >= 4
-                          ? Colors.green
-                          : _userRating >= 3
-                          ? Colors.blue
-                          : _userRating >= 2
-                          ? Colors.orange
-                          : Colors.red[700],
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -1097,10 +1187,12 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                             Tab(text: 'Trailers'),
                             Tab(text: 'Similar'),
                           ],
-                          labelColor: Theme.of(context).colorScheme.primary,
+                          labelColor: Theme.of(context).colorScheme.secondary,
                           unselectedLabelColor:
                               Theme.of(context).colorScheme.onSurfaceVariant,
-                          indicatorColor: Theme.of(context).colorScheme.primary,
+                          indicatorColor:
+                              Theme.of(context).colorScheme.secondary,
+                          indicatorWeight: 3,
                           padding: const EdgeInsets.symmetric(horizontal: 0),
                         ),
                       ),

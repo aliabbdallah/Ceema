@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 import '../models/post.dart';
 import '../models/movie.dart';
 import 'notification_service.dart';
@@ -8,6 +9,9 @@ class PostService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final NotificationService _notificationService = NotificationService();
   final FollowService _followService = FollowService();
+
+  // User data cache
+  final Map<String, Map<String, dynamic>> _userCache = {};
 
   Future<void> createPost({
     required String userId,
@@ -45,13 +49,8 @@ class PostService {
           final posts = await Future.wait(
             snapshot.docs.map((doc) async {
               final postData = doc.data();
-              // Fetch the current user data
-              final userDoc =
-                  await _firestore
-                      .collection('users')
-                      .doc(postData['userId'])
-                      .get();
-              final userData = userDoc.data() ?? {};
+              // Fetch the current user data (using cache)
+              final userData = await _getUserData(postData['userId']);
 
               // Create post with updated user data
               return Post.fromJson({
@@ -81,10 +80,8 @@ class PostService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .asyncMap((snapshot) async {
-          // Fetch the current user data
-          final userDoc =
-              await _firestore.collection('users').doc(userId).get();
-          final userData = userDoc.data() ?? {};
+          // Fetch the current user data (using cache)
+          final userData = await _getUserData(userId);
 
           return snapshot.docs.map((doc) {
             final postData = doc.data();
@@ -102,59 +99,117 @@ class PostService {
         });
   }
 
-  // Get posts from users that the current user follows
-  Stream<List<Post>> getFollowingPosts(String userId) async* {
-    try {
-      // Get list of users that the current user follows
-      final following = await _followService.getFollowing(userId).first;
-      final followingIds =
-          following.map((follow) => follow.followedId).toList();
+  /// Get posts from users that the current user follows
+  /// Uses a direct querying approach for reliability
+  Stream<List<Post>> getFollowingPosts(String userId) {
+    // Create a StreamController to manage our combined data
+    final controller = StreamController<List<Post>>.broadcast();
 
-      if (followingIds.isEmpty) {
-        yield [];
-        return;
+    // Function to load data
+    Future<void> loadPosts() async {
+      try {
+        // Show loading state
+        controller.add([]);
+
+        // Get users that current user follows (limit to 30 for performance)
+        final following = await _followService.getFollowing(userId).first;
+
+        // If not following anyone, return empty list
+        if (following.isEmpty) {
+          controller.add([]);
+          return;
+        }
+
+        // Get IDs of followed users (limited to 30 most recent)
+        final followingIds =
+            following
+                .take(30) // Limit to 30 followed users for performance
+                .map((follow) => follow.followedId)
+                .toList();
+
+        // Fetch posts in smaller direct batches to avoid Firestore limitations
+        final allPosts = <Post>[];
+
+        // Process in batches of 5 users at a time (for parallel fetching)
+        for (var i = 0; i < followingIds.length; i += 5) {
+          final end =
+              (i + 5 < followingIds.length) ? i + 5 : followingIds.length;
+          final batchIds = followingIds.sublist(i, end);
+
+          // Create a list of futures for each user's posts
+          final futures =
+              batchIds
+                  .map(
+                    (followedId) =>
+                        _firestore
+                            .collection('posts')
+                            .where('userId', isEqualTo: followedId)
+                            .orderBy('createdAt', descending: true)
+                            .limit(10) // Limit to 10 most recent posts per user
+                            .get(),
+                  )
+                  .toList();
+
+          // Wait for all futures to complete
+          final results = await Future.wait(futures);
+
+          // Process each result
+          for (final querySnapshot in results) {
+            final docs = querySnapshot.docs;
+            if (docs.isEmpty) continue;
+
+            // Process each document
+            for (final doc in docs) {
+              final postData = doc.data();
+              final postUserId = postData['userId'] as String;
+
+              // Get user data (from cache)
+              final userData = await _getUserData(postUserId);
+
+              // Create post object
+              final post = Post.fromJson({
+                ...postData,
+                'username': userData['username'] ?? postData['userName'],
+                'displayName':
+                    userData['displayName'] ??
+                    userData['username'] ??
+                    postData['userName'],
+                'profileImageUrl':
+                    userData['profileImageUrl'] ?? postData['userAvatar'],
+              }, doc.id);
+
+              allPosts.add(post);
+            }
+          }
+        }
+
+        // Sort posts by creation date (newest first)
+        allPosts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        // Send sorted posts to the stream
+        controller.add(allPosts);
+      } catch (e) {
+        controller.addError(e);
       }
-
-      // Firestore has a limit of 10 values in whereIn, so we need to chunk the list
-      for (var i = 0; i < followingIds.length; i += 10) {
-        final chunk = followingIds.skip(i).take(10).toList();
-        final querySnapshot =
-            await _firestore
-                .collection('posts')
-                .where('userId', whereIn: chunk)
-                .orderBy('createdAt', descending: true)
-                .get();
-
-        // Fetch user data for all posts in this chunk
-        final posts = await Future.wait(
-          querySnapshot.docs.map((doc) async {
-            final postData = doc.data();
-            final userDoc =
-                await _firestore
-                    .collection('users')
-                    .doc(postData['userId'])
-                    .get();
-            final userData = userDoc.data() ?? {};
-
-            return Post.fromJson({
-              ...postData,
-              'username': userData['username'] ?? postData['userName'],
-              'displayName':
-                  userData['displayName'] ??
-                  userData['username'] ??
-                  postData['userName'],
-              'profileImageUrl':
-                  userData['profileImageUrl'] ?? postData['userAvatar'],
-            }, doc.id);
-          }),
-        );
-
-        yield posts;
-      }
-    } catch (e) {
-      print('Error getting following posts: $e');
-      yield [];
     }
+
+    // Initial load
+    loadPosts();
+
+    // Set up a timer for periodic refresh (every 30 seconds)
+    final timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!controller.isClosed) {
+        loadPosts();
+      }
+    });
+
+    // Clean up when the stream is closed
+    controller.onCancel = () {
+      timer.cancel();
+      controller.close();
+    };
+
+    return controller.stream;
   }
 
   // Toggle like on a post
@@ -184,10 +239,9 @@ class PostService {
         // Notify the post owner about the like
         if (shouldNotify) {
           try {
-            final userData =
-                await _firestore.collection('users').doc(userId).get();
-            final userName = userData.data()?['displayName'] ?? 'A user';
-            final userPhotoUrl = userData.data()?['photoURL'];
+            final userData = await _getUserData(userId);
+            final userName = userData['displayName'] ?? 'A user';
+            final userPhotoUrl = userData['photoURL'];
 
             await _notificationService.createPostLikeNotification(
               recipientUserId: postOwnerId,
@@ -448,13 +502,8 @@ class PostService {
           final posts = await Future.wait(
             snapshot.docs.map((doc) async {
               final postData = doc.data();
-              // Fetch the current user data
-              final userDoc =
-                  await _firestore
-                      .collection('users')
-                      .doc(postData['userId'])
-                      .get();
-              final userData = userDoc.data() ?? {};
+              // Fetch the current user data (using cache)
+              final userData = await _getUserData(postData['userId']);
 
               // Create post with updated user data
               return Post.fromJson({
@@ -481,5 +530,17 @@ class PostService {
         .collection('comments')
         .snapshots()
         .map((snapshot) => snapshot.docs.length);
+  }
+
+  // Fetch user data with caching
+  Future<Map<String, dynamic>> _getUserData(String userId) async {
+    if (_userCache.containsKey(userId)) {
+      return _userCache[userId]!;
+    }
+
+    final userDoc = await _firestore.collection('users').doc(userId).get();
+    final userData = userDoc.data() ?? {};
+    _userCache[userId] = userData;
+    return userData;
   }
 }

@@ -5,6 +5,7 @@ import '../services/watchlist_service.dart';
 import '../widgets/star_rating.dart';
 import 'movie_details_screen.dart';
 import 'diary_entry_form.dart';
+import '../services/movie_rating_service.dart';
 
 class WatchlistScreen extends StatefulWidget {
   final String userId;
@@ -23,6 +24,7 @@ class WatchlistScreen extends StatefulWidget {
 class _WatchlistScreenState extends State<WatchlistScreen> {
   final WatchlistService _watchlistService = WatchlistService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final MovieRatingService _movieRatingService = MovieRatingService();
 
   List<WatchlistItem> _watchlistItems = [];
   bool _isLoading = true;
@@ -304,19 +306,21 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                 title: const Text('Mark as Watched'),
                 onTap: () {
                   Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => DiaryEntryForm(movie: item.movie),
-                    ),
-                  ).then((_) {
-                    // Remove from watchlist after adding to diary
-                    _watchlistService.removeFromWatchlist(
-                      item.id,
-                      widget.userId,
-                    );
-                    _loadWatchlist();
-                  });
+                  // Add to movie ratings instead of diary
+                  _movieRatingService
+                      .addOrUpdateRating(
+                        userId: widget.userId,
+                        movie: item.movie,
+                        rating: 3.0, // Default rating
+                      )
+                      .then((_) {
+                        // Remove from watchlist after adding to ratings
+                        _watchlistService.removeFromWatchlist(
+                          item.id,
+                          widget.userId,
+                        );
+                        _loadWatchlist();
+                      });
                 },
               ),
               ListTile(
@@ -416,21 +420,21 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                             IconButton(
                               icon: const Icon(Icons.check),
                               onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (context) =>
-                                            DiaryEntryForm(movie: item.movie),
-                                  ),
-                                ).then((_) {
-                                  // Remove from watchlist after adding to diary
-                                  _watchlistService.removeFromWatchlist(
-                                    item.id,
-                                    widget.userId,
-                                  );
-                                  _loadWatchlist();
-                                });
+                                // Add to movie ratings instead of diary
+                                _movieRatingService
+                                    .addOrUpdateRating(
+                                      userId: widget.userId,
+                                      movie: item.movie,
+                                      rating: 3.0, // Default rating
+                                    )
+                                    .then((_) {
+                                      // Remove from watchlist after adding to ratings
+                                      _watchlistService.removeFromWatchlist(
+                                        item.id,
+                                        widget.userId,
+                                      );
+                                      _loadWatchlist();
+                                    });
                               },
                               tooltip: 'Mark as watched',
                             ),

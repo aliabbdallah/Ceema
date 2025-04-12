@@ -3,19 +3,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'trending_movies_section.dart';
 import 'post_card.dart';
-import 'app_bar.dart';
-import '../../models/movie.dart';
 import '../../models/post.dart';
 import '../../services/post_service.dart';
 import '../../services/post_recommendation_service.dart';
-import '../../screens/post_recommendations_screen.dart';
-import '../../widgets/loading_indicator.dart';
 import 'compose_post_section.dart';
-import '../../screens/user_search_screen.dart';
+import '../../screens/search_screen.dart';
 import '../../screens/notifications_screen.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/profile_image_widget.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../screens/compose_post_screen.dart';
+import 'app_bar.dart';
 
 class SeamlessFeedScreen extends StatefulWidget {
   const SeamlessFeedScreen({Key? key}) : super(key: key);
@@ -60,10 +58,6 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
     super.dispose();
   }
 
-  void _onScroll() {
-    // Removed scroll-based visibility toggle
-  }
-
   Future<void> _checkUserPreferences() async {
     setState(() {
       _showTrendingMoviesSection = true;
@@ -83,63 +77,9 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
   }
 
   void _showComposeSheet() {
-    // Provide tactile feedback
-    HapticFeedback.mediumImpact();
-
-    // Show compose sheet
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder:
-          (context) => Container(
-            height: MediaQuery.of(context).size.height * 0.9,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(28),
-                topRight: Radius.circular(28),
-              ),
-            ),
-            child: Column(
-              children: [
-                // Drag indicator
-                Container(
-                  margin: const EdgeInsets.only(top: 12, bottom: 8),
-                  height: 4,
-                  width: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-
-                // Compose UI would go here
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Create Post',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 16),
-                        // This is just a placeholder - your actual compose section would go here
-                        Expanded(
-                          child: ComposePostSection(
-                            onCancel: () => Navigator.pop(context),
-                            maxHeight: MediaQuery.of(context).size.height * 0.8,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ComposePostScreen()),
     );
   }
 
@@ -276,7 +216,7 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
               bottom: BorderSide(
                 color:
                     isSelected
-                        ? Theme.of(context).colorScheme.primary
+                        ? Theme.of(context).colorScheme.secondary
                         : Colors.transparent,
                 width: 2,
               ),
@@ -288,9 +228,10 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
             style: TextStyle(
               color:
                   isSelected
-                      ? Theme.of(context).colorScheme.primary
+                      ? Theme.of(context).colorScheme.secondary
                       : Theme.of(context).colorScheme.onSurfaceVariant,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
             ),
           ),
         ),
@@ -312,99 +253,7 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             // App Bar
-            SliverAppBar(
-              pinned: true,
-              floating: true,
-              centerTitle: false,
-              title: Text(
-                'Ceema',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.primary,
-                ),
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.search),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const UserSearchScreen(),
-                      ),
-                    );
-                  },
-                ),
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.notifications_outlined),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const NotificationsScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    StreamBuilder<int>(
-                      stream:
-                          NotificationService().getUnreadNotificationCount(),
-                      builder: (context, snapshot) {
-                        final unreadCount = snapshot.data ?? 0;
-
-                        if (unreadCount == 0) {
-                          return const SizedBox.shrink();
-                        }
-
-                        return Positioned(
-                          top: 8,
-                          right: 8,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: colorScheme.error,
-                              shape: BoxShape.circle,
-                            ),
-                            child:
-                                unreadCount > 9
-                                    ? Text(
-                                      '9+',
-                                      style: TextStyle(
-                                        color: colorScheme.onError,
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    )
-                                    : unreadCount > 1
-                                    ? Text(
-                                      '$unreadCount',
-                                      style: TextStyle(
-                                        color: colorScheme.onError,
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    )
-                                    : Container(
-                                      width: 4,
-                                      height: 4,
-                                      decoration: BoxDecoration(
-                                        color: colorScheme.onError,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 4),
-              ],
-            ),
+            const CeemaAppBar(),
 
             // Loading indicator
             if (_isLoading)

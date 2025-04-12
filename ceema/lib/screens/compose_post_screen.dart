@@ -281,6 +281,68 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
     );
   }
 
+  Widget _buildContentInput() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Your Review',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.secondary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Theme.of(context).dividerColor.withOpacity(0.2),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: TextField(
+            controller: _contentController,
+            decoration: InputDecoration(
+              hintText: 'Share your thoughts about this movie...',
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.all(16),
+              counterText: '${_contentController.text.length}/500',
+              counterStyle: TextStyle(
+                color:
+                    _contentController.text.length > 450
+                        ? Colors.red
+                        : Theme.of(context).hintColor,
+              ),
+            ),
+            maxLines: 5,
+            maxLength: 500,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) {
+              // Use a post-frame callback to ensure the keyboard is properly dismissed
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                FocusScope.of(context).unfocus();
+              });
+            },
+            onEditingComplete: () {
+              // Use a post-frame callback to ensure the keyboard is properly dismissed
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                FocusScope.of(context).unfocus();
+              });
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -299,74 +361,64 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
-                    : const Text(
+                    : Text(
                       'Post',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Theme.of(context).colorScheme.secondary,
                         fontWeight: FontWeight.bold,
+                        fontSize: 18,
                       ),
                     ),
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (_selectedMovie == null)
-              _buildMovieSearchBar()
-            else
-              _buildSelectedMovie(),
-            const SizedBox(height: 16),
-            Text('Your Review', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _contentController,
-              decoration: const InputDecoration(
-                hintText: 'Share your thoughts about this movie...',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.all(16),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_selectedMovie == null)
+                _buildMovieSearchBar()
+              else
+                _buildSelectedMovie(),
+              const SizedBox(height: 24),
+              _buildContentInput(),
+              const SizedBox(height: 24),
+              Center(
+                child: Column(
+                  children: [
+                    Text(
+                      'Rate this movie',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.secondary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    RatingBar.builder(
+                      initialRating: _rating,
+                      minRating: 0,
+                      direction: Axis.horizontal,
+                      allowHalfRating: true,
+                      itemCount: 5,
+                      itemSize: 32,
+                      itemPadding: const EdgeInsets.symmetric(horizontal: 4.0),
+                      itemBuilder:
+                          (context, _) =>
+                              const Icon(Icons.star, color: Colors.amber),
+                      onRatingUpdate: (rating) {
+                        setState(() {
+                          _rating = rating;
+                        });
+                      },
+                    ),
+                  ],
+                ),
               ),
-              maxLines: 5,
-              maxLength: 500,
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: Column(
-                children: [
-                  Text(
-                    'Rate this movie',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  RatingBar.builder(
-                    initialRating: _rating,
-                    minRating: 0,
-                    direction: Axis.horizontal,
-                    allowHalfRating: true,
-                    itemCount: 5,
-                    itemPadding: const EdgeInsets.symmetric(horizontal: 4.0),
-                    itemBuilder:
-                        (context, _) =>
-                            const Icon(Icons.star, color: Colors.amber),
-                    onRatingUpdate: (rating) {
-                      setState(() {
-                        _rating = rating;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _rating > 0
-                        ? '${_rating.toStringAsFixed(1)} / 5.0'
-                        : 'Not rated',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

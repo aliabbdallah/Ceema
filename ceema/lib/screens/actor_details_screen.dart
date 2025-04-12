@@ -11,10 +11,7 @@ import 'full_filmography_screen.dart';
 class ActorDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> actor;
 
-  const ActorDetailsScreen({
-    Key? key,
-    required this.actor,
-  }) : super(key: key);
+  const ActorDetailsScreen({Key? key, required this.actor}) : super(key: key);
 
   @override
   _ActorDetailsScreenState createState() => _ActorDetailsScreenState();
@@ -45,20 +42,23 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
       final userId = _auth.currentUser?.uid;
       if (userId == null) return;
 
-      final watchlistDoc = await _firestore
-          .collection('watchlists')
-          .doc(userId)
-          .get();
+      final watchlistDoc =
+          await _firestore.collection('watchlists').doc(userId).get();
       if (watchlistDoc.exists) {
         final watchlist = watchlistDoc.data()?['movies'] ?? [];
-        _userWatchlist = Set<String>.from(watchlist.map((m) => m['id'].toString()));
+        _userWatchlist = Set<String>.from(
+          watchlist.map((m) => m['id'].toString()),
+        );
       }
 
-      final diaryQuery = await _firestore
-          .collection('diary_entries')
-          .where('userId', isEqualTo: userId)
-          .get();
-      _userDiary = Set<String>.from(diaryQuery.docs.map((doc) => doc.data()['movieId'].toString()));
+      final diaryQuery =
+          await _firestore
+              .collection('diary_entries')
+              .where('userId', isEqualTo: userId)
+              .get();
+      _userDiary = Set<String>.from(
+        diaryQuery.docs.map((doc) => doc.data()['movieId'].toString()),
+      );
 
       if (mounted) {
         setState(() {});
@@ -101,7 +101,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
       final birthDate = DateTime.parse(birthday);
       final now = DateTime.now();
       var age = now.year - birthDate.year;
-      if (now.month < birthDate.month || 
+      if (now.month < birthDate.month ||
           (now.month == birthDate.month && now.day < birthDate.day)) {
         age--;
       }
@@ -122,8 +122,18 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
 
   String _getMonthName(int month) {
     const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     return months[month - 1];
   }
@@ -136,9 +146,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
       ),
       title: Text(
         widget.actor['name'],
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-        ),
+        style: const TextStyle(fontWeight: FontWeight.bold),
       ),
       centerTitle: true,
       backgroundColor: Colors.transparent,
@@ -147,7 +155,8 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
   }
 
   Widget _buildProfileSection() {
-    final heroTag = 'actor_${widget.actor['id']}_${widget.actor['profile_path']}';
+    final heroTag =
+        'actor_${widget.actor['id']}_${widget.actor['profile_path']}';
     final birthday = _actorDetails?['birthday'];
     final age = birthday != null ? _calculateAge(birthday) : null;
 
@@ -193,14 +202,15 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                   Text(
                     'Biography',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     _actorDetails!['biography'],
                     maxLines: _isBiographyExpanded ? null : 4,
-                    overflow: _isBiographyExpanded ? null : TextOverflow.ellipsis,
+                    overflow:
+                        _isBiographyExpanded ? null : TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   TextButton(
@@ -209,7 +219,9 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
                         _isBiographyExpanded = !_isBiographyExpanded;
                       });
                     },
-                    child: Text(_isBiographyExpanded ? 'Show less' : 'Read more'),
+                    child: Text(
+                      _isBiographyExpanded ? 'Show less' : 'Read more',
+                    ),
                   ),
                 ],
               ],
@@ -222,11 +234,12 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
 
   Widget _buildStatisticsBar() {
     final totalFilms = _credits.length;
-    final watchlistCount = _credits.where((credit) => 
-      _userWatchlist.contains(credit['id'].toString())).length;
-    final watchlistPercentage = totalFilms > 0 
-      ? (watchlistCount / totalFilms * 100).round() 
-      : 0;
+    final watchlistCount =
+        _credits
+            .where((credit) => _userWatchlist.contains(credit['id'].toString()))
+            .length;
+    final watchlistPercentage =
+        totalFilms > 0 ? (watchlistCount / totalFilms * 100).round() : 0;
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -246,9 +259,9 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
               ),
               Text(
                 '$totalFilms FILMS',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -262,9 +275,9 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
               ),
               Text(
                 '$watchlistPercentage%',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -380,33 +393,27 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(vertical: 16),
               decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: Colors.white24,
-                  ),
-                ),
+                border: Border(top: BorderSide(color: Colors.white24)),
               ),
               child: ListTile(
                 title: Text(
                   'All films as Actor',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Colors.white,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleMedium?.copyWith(color: Colors.white),
                 ),
-                trailing: const Icon(
-                  Icons.chevron_right,
-                  color: Colors.white,
-                ),
+                trailing: const Icon(Icons.chevron_right, color: Colors.white),
                 onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => FullFilmographyScreen(
-                        credits: _credits,
-                        actorName: widget.actor['name'],
-                        userWatchlist: _userWatchlist,
-                        userDiary: _userDiary,
-                      ),
+                      builder:
+                          (context) => FullFilmographyScreen(
+                            credits: _credits,
+                            actorName: widget.actor['name'],
+                            userWatchlist: _userWatchlist,
+                            userDiary: _userDiary,
+                          ),
                     ),
                   );
                 },
@@ -420,11 +427,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
@@ -437,9 +440,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
             ),
             title: Text(
               widget.actor['name'],
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             centerTitle: true,
             backgroundColor: Colors.transparent,
@@ -459,4 +460,4 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
       ),
     );
   }
-} 
+}

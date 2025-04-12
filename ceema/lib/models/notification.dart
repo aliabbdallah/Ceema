@@ -10,6 +10,7 @@ enum NotificationType {
   followRequestSent,
   followRequestSentAccepted,
   commentReply,
+  followBackSuggestion,
 }
 
 class Notification {

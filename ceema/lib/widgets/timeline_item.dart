@@ -9,10 +9,10 @@ import '../models/movie.dart';
 class TimelineItem extends StatelessWidget {
   final Post post;
   final String?
-      relevanceReason; // Why this is shown (e.g., "Because you liked Inception")
+  relevanceReason; // Why this is shown (e.g., "Because you liked Inception")
   final bool isHighlighted;
   final double?
-      relevanceScore; // Optional score (0.0-1.0) to show how relevant this is
+  relevanceScore; // Optional score (0.0-1.0) to show how relevant this is
 
   const TimelineItem({
     Key? key,
@@ -67,9 +67,13 @@ class TimelineItem extends StatelessWidget {
       elevation: isHighlighted ? 2 : 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: isHighlighted
-            ? BorderSide(color: colorScheme.primary.withOpacity(0.5), width: 1)
-            : BorderSide(color: colorScheme.outlineVariant, width: 0.5),
+        side:
+            isHighlighted
+                ? BorderSide(
+                  color: colorScheme.primary.withOpacity(0.5),
+                  width: 1,
+                )
+                : BorderSide(color: colorScheme.outlineVariant, width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -90,9 +94,10 @@ class TimelineItem extends StatelessWidget {
                   Icon(
                     _getRelevanceIcon(relevanceReason),
                     size: 16,
-                    color: relevanceScore != null
-                        ? _getRelevanceColor(context, relevanceScore!)
-                        : colorScheme.primary,
+                    color:
+                        relevanceScore != null
+                            ? _getRelevanceColor(context, relevanceScore!)
+                            : colorScheme.primary,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -107,14 +112,16 @@ class TimelineItem extends StatelessWidget {
                             text: 'Recommendation: ',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: relevanceScore != null
-                                  ? _getRelevanceColor(context, relevanceScore!)
-                                  : colorScheme.primary,
+                              color:
+                                  relevanceScore != null
+                                      ? _getRelevanceColor(
+                                        context,
+                                        relevanceScore!,
+                                      )
+                                      : colorScheme.primary,
                             ),
                           ),
-                          TextSpan(
-                            text: relevanceReason!,
-                          ),
+                          TextSpan(text: relevanceReason!),
                         ],
                       ),
                     ),
@@ -122,10 +129,14 @@ class TimelineItem extends StatelessWidget {
                   if (relevanceScore != null)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
-                        color: _getRelevanceColor(context, relevanceScore!)
-                            .withOpacity(0.2),
+                        color: _getRelevanceColor(
+                          context,
+                          relevanceScore!,
+                        ).withOpacity(0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -153,10 +164,11 @@ class TimelineItem extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => UserProfileScreen(
-                          userId: post.userId,
-                          username: post.userName,
-                        ),
+                        builder:
+                            (context) => UserProfileScreen(
+                              userId: post.userId,
+                              username: post.userName,
+                            ),
                       ),
                     );
                   },
@@ -193,10 +205,7 @@ class TimelineItem extends StatelessWidget {
                 // Post text content
                 Text(
                   post.content,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: colorScheme.onSurface,
-                  ),
+                  style: TextStyle(fontSize: 15, color: colorScheme.onSurface),
                 ),
                 const SizedBox(height: 16),
 
@@ -207,15 +216,16 @@ class TimelineItem extends StatelessWidget {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => MovieDetailsScreen(
-                            movie: Movie(
-                              id: post.movieId,
-                              title: post.movieTitle,
-                              posterUrl: post.moviePosterUrl,
-                              year: post.movieYear,
-                              overview: post.movieOverview,
-                            ),
-                          ),
+                          builder:
+                              (context) => MovieDetailsScreen(
+                                movie: Movie(
+                                  id: post.movieId,
+                                  title: post.movieTitle,
+                                  posterUrl: post.moviePosterUrl,
+                                  year: post.movieYear,
+                                  overview: post.movieOverview,
+                                ),
+                              ),
                         ),
                       );
                     },
@@ -258,15 +268,32 @@ class TimelineItem extends StatelessWidget {
                                 const SizedBox(height: 8),
                                 if (post.rating > 0)
                                   Row(
-                                    children: List.generate(5, (index) {
-                                      return Icon(
-                                        index < post.rating
-                                            ? Icons.star
-                                            : Icons.star_border,
-                                        color: Colors.amber,
-                                        size: 16,
-                                      );
-                                    }),
+                                    children: List.generate(
+                                      post.rating.ceil(),
+                                      (index) {
+                                        if (index < post.rating.floor()) {
+                                          return Icon(
+                                            Icons.star,
+                                            color: Colors.amber,
+                                            size: 16,
+                                          );
+                                        } else if (index ==
+                                                post.rating.floor() &&
+                                            post.rating % 1 >= 0.5) {
+                                          return Icon(
+                                            Icons.star_half,
+                                            color: Colors.amber,
+                                            size: 16,
+                                          );
+                                        } else {
+                                          return Icon(
+                                            Icons.star_outlined,
+                                            color: Colors.amber,
+                                            size: 16,
+                                          );
+                                        }
+                                      },
+                                    ),
                                   ),
                               ],
                             ),
@@ -282,17 +309,11 @@ class TimelineItem extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 16),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.favorite,
-                        size: 16,
-                        color: Colors.red[400],
-                      ),
+                      Icon(Icons.favorite, size: 16, color: Colors.red[400]),
                       const SizedBox(width: 4),
                       Text(
                         post.likes.length.toString(),
-                        style: TextStyle(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
                       ),
                       const SizedBox(width: 16),
                       Icon(
@@ -303,9 +324,7 @@ class TimelineItem extends StatelessWidget {
                       const SizedBox(width: 4),
                       Text(
                         post.commentCount.toString(),
-                        style: TextStyle(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
                       ),
                     ],
                   ),

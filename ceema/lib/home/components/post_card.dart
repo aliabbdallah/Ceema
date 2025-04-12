@@ -32,22 +32,55 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
   final PostService _postService = PostService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   bool _isLiked = false;
+  bool _isUpdating = false;
+  List<String> _localLikes = [];
+  DateTime? _lastUpdateTime; // Track last update time for rate limiting
+  static const Duration _updateCooldown = Duration(
+    milliseconds: 500,
+  ); // Rate limiting
 
   @override
   void initState() {
     super.initState();
     _isLiked = widget.post.likes.contains(_auth.currentUser?.uid);
+    _localLikes = List.from(widget.post.likes);
   }
 
   Future<bool> _onLikeButtonTapped(bool isLiked) async {
+    if (_isUpdating) return isLiked;
+
+    // Rate limiting check
+    if (_lastUpdateTime != null &&
+        DateTime.now().difference(_lastUpdateTime!) < _updateCooldown) {
+      return isLiked;
+    }
+
+    setState(() {
+      _isUpdating = true;
+      _lastUpdateTime = DateTime.now();
+      if (isLiked) {
+        _localLikes.remove(_auth.currentUser!.uid);
+      } else {
+        _localLikes.add(_auth.currentUser!.uid);
+      }
+      _isLiked = !_isLiked;
+    });
+
     try {
+      // Batch the update with other pending operations if any
       await _postService.toggleLike(widget.post.id, _auth.currentUser!.uid);
-      setState(() {
-        _isLiked = !_isLiked;
-      });
       return !isLiked;
     } catch (e) {
+      // Revert optimistic update on failure
       if (mounted) {
+        setState(() {
+          if (isLiked) {
+            _localLikes.add(_auth.currentUser!.uid);
+          } else {
+            _localLikes.remove(_auth.currentUser!.uid);
+          }
+          _isLiked = isLiked;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error updating like: $e'),
@@ -56,6 +89,21 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
         );
       }
       return isLiked;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdating = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void didUpdateWidget(SeamlessPostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post.likes != widget.post.likes) {
+      _localLikes = List.from(widget.post.likes);
+      _isLiked = _localLikes.contains(_auth.currentUser?.uid);
     }
   }
 
@@ -352,6 +400,59 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
                                     fontSize: 12,
                                   ),
                                 ),
+                                if (widget.post.rating > 0) ...[
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      ...List.generate(
+                                        widget.post.rating.ceil(),
+                                        (index) {
+                                          if (index <
+                                              widget.post.rating.floor()) {
+                                            return Icon(
+                                              Icons.star,
+                                              size: 20,
+                                              color:
+                                                  Theme.of(
+                                                    context,
+                                                  ).colorScheme.secondary,
+                                            );
+                                          } else if (index ==
+                                                  widget.post.rating.floor() &&
+                                              widget.post.rating % 1 >= 0.5) {
+                                            return Icon(
+                                              Icons.star_half,
+                                              size: 20,
+                                              color:
+                                                  Theme.of(
+                                                    context,
+                                                  ).colorScheme.secondary,
+                                            );
+                                          } else {
+                                            return Icon(
+                                              Icons.star_outlined,
+                                              size: 20,
+                                              color:
+                                                  Theme.of(
+                                                    context,
+                                                  ).colorScheme.secondary,
+                                            );
+                                          }
+                                        },
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        widget.post.rating % 1 == 0.5
+                                            ? '${widget.post.rating}/5'
+                                            : '${widget.post.rating.toInt()}/5',
+                                        style: TextStyle(
+                                          color: colorScheme.onSurfaceVariant,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -376,7 +477,7 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
                 Row(
                   children: [
                     LikeButton(
-                      size: 25,
+                      size: 30,
                       isLiked: _isLiked,
                       onTap: _onLikeButtonTapped,
                       likeBuilder: (bool isLiked) {
@@ -386,10 +487,10 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
                               isLiked
                                   ? Colors.red
                                   : colorScheme.onSurfaceVariant,
-                          size: 25,
+                          size: 30,
                         );
                       },
-                      likeCount: widget.post.likes.length,
+                      likeCount: _localLikes.length,
                       countBuilder: (int? count, bool isLiked, String text) {
                         return Text(
                           text,
@@ -398,6 +499,9 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
                                 isLiked
                                     ? Colors.red
                                     : colorScheme.onSurfaceVariant,
+                            fontSize: 16,
+                            fontWeight:
+                                isLiked ? FontWeight.bold : FontWeight.normal,
                           ),
                         );
                       },
@@ -410,8 +514,13 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
                         start: Colors.red,
                         end: Colors.redAccent,
                       ),
+                      bubblesSize: 10.0,
+                      circleSize: 40.0,
+                      likeCountAnimationType: LikeCountAnimationType.part,
+                      likeCountPadding: const EdgeInsets.only(left: 4.0),
+                      mainAxisAlignment: MainAxisAlignment.start,
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 24),
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: () {
@@ -425,12 +534,18 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
                       },
                       child: Row(
                         children: [
-                          const Icon(Icons.comment),
+                          Icon(
+                            Icons.comment,
+                            size: 32,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             widget.post.commentCount.toString(),
                             style: TextStyle(
                               color: colorScheme.onSurfaceVariant,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],

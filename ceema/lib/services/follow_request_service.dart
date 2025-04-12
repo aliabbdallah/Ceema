@@ -97,7 +97,7 @@ class FollowRequestService {
     // Execute the batch
     await batch.commit();
 
-    // Create notification for the requester
+    // Create notification for the requester that their request was accepted
     await _notificationService.createFollowRequestAcceptedNotification(
       recipientUserId: request.requesterId,
       senderUserId: request.targetId,
@@ -105,21 +105,30 @@ class FollowRequestService {
       senderPhotoUrl: request.targetAvatar,
     );
 
-    // Update any pending follow request sent notifications
-    final sentNotifications =
+    // Create a separate follow back suggestion notification for the target user
+    await _notificationService.createFollowBackSuggestionNotification(
+      recipientUserId: request.targetId,
+      senderUserId: request.requesterId,
+      senderName: request.requesterName,
+      senderPhotoUrl: request.requesterAvatar,
+    );
+
+    // Delete the original follow request notification
+    final originalNotification =
         await _firestore
             .collection('notifications')
-            .where('userId', isEqualTo: request.requesterId)
+            .where('userId', isEqualTo: request.targetId)
             .where(
               'type',
-              isEqualTo:
-                  app_notification.NotificationType.followRequestSent.name,
+              isEqualTo: app_notification.NotificationType.followRequest.name,
             )
-            .where('senderUserId', isEqualTo: request.targetId)
+            .where('senderUserId', isEqualTo: request.requesterId)
             .get();
 
-    for (var doc in sentNotifications.docs) {
-      await _notificationService.updateFollowRequestSentToAccepted(doc.id);
+    if (originalNotification.docs.isNotEmpty) {
+      await _notificationService.deleteNotification(
+        originalNotification.docs.first.id,
+      );
     }
   }
 

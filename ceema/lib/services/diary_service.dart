@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/diary_entry.dart';
 import '../models/movie.dart';
 import 'post_service.dart';
+import 'profile_service.dart';
 
 class DiaryService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -34,6 +35,10 @@ class DiaryService {
       'isRewatch': isRewatch,
       'createdAt': FieldValue.serverTimestamp(),
     });
+
+    // Update watched count
+    final profileService = ProfileService();
+    await profileService.updateUserFriendStats(userId);
   }
 
   // Get all diary entries for a user

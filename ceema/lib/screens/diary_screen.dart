@@ -186,10 +186,10 @@ class _DiaryScreenState extends State<DiaryScreen> {
                     labelStyle: TextStyle(
                       color:
                           _selectedFilter == 'all'
-                              ? Theme.of(context).colorScheme.onPrimary
+                              ? Theme.of(context).colorScheme.onSecondary
                               : Theme.of(context).colorScheme.onSurface,
                     ),
-                    selectedColor: Theme.of(context).colorScheme.primary,
+                    selectedColor: Theme.of(context).colorScheme.secondary,
                     backgroundColor: Theme.of(context).colorScheme.surface,
                   ),
                   const SizedBox(width: 8),
@@ -202,10 +202,10 @@ class _DiaryScreenState extends State<DiaryScreen> {
                     labelStyle: TextStyle(
                       color:
                           _selectedFilter == 'favorites'
-                              ? Theme.of(context).colorScheme.onPrimary
+                              ? Theme.of(context).colorScheme.onSecondary
                               : Theme.of(context).colorScheme.onSurface,
                     ),
-                    selectedColor: Theme.of(context).colorScheme.primary,
+                    selectedColor: Theme.of(context).colorScheme.secondary,
                     backgroundColor: Theme.of(context).colorScheme.surface,
                   ),
                   const SizedBox(width: 8),
@@ -218,10 +218,10 @@ class _DiaryScreenState extends State<DiaryScreen> {
                     labelStyle: TextStyle(
                       color:
                           _selectedFilter == 'rewatches'
-                              ? Theme.of(context).colorScheme.onPrimary
+                              ? Theme.of(context).colorScheme.onSecondary
                               : Theme.of(context).colorScheme.onSurface,
                     ),
-                    selectedColor: Theme.of(context).colorScheme.primary,
+                    selectedColor: Theme.of(context).colorScheme.secondary,
                     backgroundColor: Theme.of(context).colorScheme.surface,
                   ),
                 ],
@@ -268,20 +268,26 @@ class _DiaryScreenState extends State<DiaryScreen> {
   Widget _buildStarRating(double rating) {
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (index) {
-        final starValue = index + 1;
-        final isHalfStar = rating - starValue + 1 == 0.5;
-        final isFullStar = rating >= starValue;
-
-        return Icon(
-          isHalfStar
-              ? Icons.star_half
-              : isFullStar
-              ? Icons.star
-              : Icons.star_border,
-          color: Colors.amber,
-          size: 16,
-        );
+      children: List.generate(rating.ceil(), (index) {
+        if (index < rating.floor()) {
+          return Icon(
+            Icons.star,
+            color: Theme.of(context).colorScheme.secondary,
+            size: 16,
+          );
+        } else if (index == rating.floor() && rating % 1 >= 0.5) {
+          return Icon(
+            Icons.star_half,
+            color: Theme.of(context).colorScheme.secondary,
+            size: 16,
+          );
+        } else {
+          return Icon(
+            Icons.star_outlined,
+            color: Theme.of(context).colorScheme.secondary,
+            size: 16,
+          );
+        }
       }),
     );
   }

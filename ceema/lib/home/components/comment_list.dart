@@ -102,9 +102,7 @@ class _CommentListState extends State<CommentList> {
               final comments = snapshot.data ?? [];
 
               if (comments.isEmpty) {
-                return const Center(
-                  child: Text('No comments yet. Be the first to comment!'),
-                );
+                return const SizedBox.shrink();
               }
 
               return Column(
@@ -142,24 +140,80 @@ class _CommentListState extends State<CommentList> {
           ),
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _commentController,
-                    decoration: const InputDecoration(
-                      hintText: 'Write a comment...',
-                      border: OutlineInputBorder(),
+            child: Container(
+              height: 48, // Fixed height for single line
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E2732), // Dark blue background
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: const Color(0xFF38444D), // Twitter-like border color
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.horizontal(
+                          left: Radius.circular(24),
+                        ),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.horizontal(
+                          left: Radius.circular(24),
+                        ),
+                        child: TextField(
+                          controller: _commentController,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: 'Write a comment...',
+                            hintStyle: TextStyle(
+                              color: Color(0xFF8899A6),
+                              fontSize: 16,
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 14,
+                            ),
+                            fillColor: Color(0xFF1E2732),
+                            filled: true,
+                          ),
+                          minLines: 1,
+                          maxLines: 1,
+                        ),
+                      ),
                     ),
-                    maxLines: null,
                   ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.send),
-                  onPressed: _isSubmitting ? null : _submitComment,
-                ),
-              ],
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: const BorderRadius.horizontal(
+                        right: Radius.circular(24),
+                      ),
+                      onTap: _isSubmitting ? null : _submitComment,
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        alignment: Alignment.center,
+                        child: Icon(
+                          Icons.send_rounded,
+                          color:
+                              _isSubmitting
+                                  ? const Color(0xFF8899A6)
+                                  : const Color(0xFF1D9BF0), // Twitter blue
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ]),
@@ -191,9 +245,7 @@ class _CommentListState extends State<CommentList> {
               final comments = snapshot.data ?? [];
 
               if (comments.isEmpty) {
-                return const Center(
-                  child: Text('No comments yet. Be the first to comment!'),
-                );
+                return const SizedBox.shrink();
               }
 
               return ListView.builder(
@@ -231,24 +283,80 @@ class _CommentListState extends State<CommentList> {
         ),
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _commentController,
-                  decoration: const InputDecoration(
-                    hintText: 'Write a comment...',
-                    border: OutlineInputBorder(),
+          child: Container(
+            height: 48, // Fixed height for single line
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E2732), // Dark blue background
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: const Color(0xFF38444D), // Twitter-like border color
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 48,
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.horizontal(
+                        left: Radius.circular(24),
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.horizontal(
+                        left: Radius.circular(24),
+                      ),
+                      child: TextField(
+                        controller: _commentController,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'Write a comment...',
+                          hintStyle: TextStyle(
+                            color: Color(0xFF8899A6),
+                            fontSize: 16,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
+                          fillColor: Color(0xFF1E2732),
+                          filled: true,
+                        ),
+                        minLines: 1,
+                        maxLines: 1,
+                      ),
+                    ),
                   ),
-                  maxLines: null,
                 ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.send),
-                onPressed: _isSubmitting ? null : _submitComment,
-              ),
-            ],
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: const BorderRadius.horizontal(
+                      right: Radius.circular(24),
+                    ),
+                    onTap: _isSubmitting ? null : _submitComment,
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      alignment: Alignment.center,
+                      child: Icon(
+                        Icons.send_rounded,
+                        color:
+                            _isSubmitting
+                                ? const Color(0xFF8899A6)
+                                : const Color(0xFF1D9BF0), // Twitter blue
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],

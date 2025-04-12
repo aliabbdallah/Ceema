@@ -9,32 +9,31 @@ class DiaryEntryDetails extends StatelessWidget {
   final DiaryEntry entry;
   final DiaryService _diaryService = DiaryService();
 
-  DiaryEntryDetails({
-    Key? key,
-    required this.entry,
-  }) : super(key: key);
+  DiaryEntryDetails({Key? key, required this.entry}) : super(key: key);
 
   Future<void> _deleteEntry(BuildContext context) async {
     final bool confirm = await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Entry'),
-        content:
-            const Text('Are you sure you want to delete this diary entry?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.red),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete Entry'),
+            content: const Text(
+              'Are you sure you want to delete this diary entry?',
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
 
     if (confirm == true) {
@@ -82,10 +81,9 @@ class DiaryEntryDetails extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => DiaryEntryForm(
-                    movie: movie,
-                    existingEntry: entry,
-                  ),
+                  builder:
+                      (context) =>
+                          DiaryEntryForm(movie: movie, existingEntry: entry),
                 ),
               );
             },
@@ -140,14 +138,30 @@ class DiaryEntryDetails extends StatelessWidget {
                           const SizedBox(height: 16),
                           Row(
                             children: [
-                              ...List.generate(5, (index) {
-                                return Icon(
-                                  index < entry.rating
-                                      ? Icons.star
-                                      : Icons.star_border,
-                                  color: Colors.amber,
-                                  size: 24,
-                                );
+                              ...List.generate(entry.rating.ceil(), (index) {
+                                if (index < entry.rating.floor()) {
+                                  return Icon(
+                                    Icons.star,
+                                    color:
+                                        Theme.of(context).colorScheme.secondary,
+                                    size: 24,
+                                  );
+                                } else if (index == entry.rating.floor() &&
+                                    entry.rating % 1 >= 0.5) {
+                                  return Icon(
+                                    Icons.star_half,
+                                    color:
+                                        Theme.of(context).colorScheme.secondary,
+                                    size: 24,
+                                  );
+                                } else {
+                                  return Icon(
+                                    Icons.star_outlined,
+                                    color:
+                                        Theme.of(context).colorScheme.secondary,
+                                    size: 24,
+                                  );
+                                }
                               }),
                               const SizedBox(width: 8),
                               Text(
@@ -199,10 +213,7 @@ class DiaryEntryDetails extends StatelessWidget {
             if (entry.review.isNotEmpty) ...[
               const Text(
                 'Your Review',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Card(

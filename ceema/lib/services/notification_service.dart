@@ -164,7 +164,7 @@ class NotificationService {
     );
   }
 
-  // Create a follow request accepted notification
+  // Create a follow request accepted notification for the requester
   Future<void> createFollowRequestAcceptedNotification({
     required String recipientUserId,
     required String senderUserId,
@@ -200,12 +200,30 @@ class NotificationService {
     );
   }
 
+  // Create a follow back suggestion notification
+  Future<void> createFollowBackSuggestionNotification({
+    required String recipientUserId,
+    required String senderUserId,
+    required String senderName,
+    required String senderPhotoUrl,
+  }) async {
+    await _createNotification(
+      userId: recipientUserId,
+      title: 'Follow Back Suggestion',
+      body: 'Would you like to follow $senderName back?',
+      type: app_notification.NotificationType.followBackSuggestion,
+      senderUserId: senderUserId,
+      senderName: senderName,
+      senderPhotoUrl: senderPhotoUrl,
+    );
+  }
+
   // Update notification when sent follow request is accepted
   Future<void> updateFollowRequestSentToAccepted(String notificationId) async {
     await _notificationsCollection.doc(notificationId).update({
       'type': app_notification.NotificationType.followRequestSentAccepted.name,
       'title': 'Follow Request Accepted',
-      'body': 'Your follow request was accepted',
+      'body': 'Your follow request was accepted by the user',
     });
   }
 

@@ -87,6 +87,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return null;
   }
 
+  // Add method to check password requirements
+  Map<String, bool> _checkPasswordRequirements(String password) {
+    return {
+      '8 characters long': password.length >= 8,
+      'Uppercase letter': password.contains(RegExp(r'[A-Z]')),
+      'Lowercase letter': password.contains(RegExp(r'[a-z]')),
+      'Number': password.contains(RegExp(r'[0-9]')),
+      'Special character': password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]')),
+    };
+  }
+
   String? _validateUsername(String? value) {
     if (value == null || value.isEmpty) {
       return 'Please enter a username';
@@ -648,6 +659,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 TextFormField(
                   controller: _passwordController,
                   obscureText: !_isPasswordVisible,
+                  onChanged: (value) {
+                    setState(() {}); // Trigger rebuild to update requirements
+                  },
                   decoration: InputDecoration(
                     labelText: 'Password',
                     prefixIcon: const Icon(Icons.lock_outline),
@@ -668,6 +682,45 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                   ),
                   validator: _validatePassword,
+                ),
+                const SizedBox(height: 8),
+                // Password requirements
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children:
+                      _checkPasswordRequirements(_passwordController.text)
+                          .entries
+                          .map(
+                            (requirement) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    requirement.value
+                                        ? Icons.check_circle
+                                        : Icons.cancel,
+                                    size: 16,
+                                    color:
+                                        requirement.value
+                                            ? Colors.green
+                                            : Colors.grey,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    requirement.key,
+                                    style: TextStyle(
+                                      color:
+                                          requirement.value
+                                              ? Colors.green
+                                              : Colors.grey,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                          .toList(),
                 ),
                 const SizedBox(height: 16),
 
