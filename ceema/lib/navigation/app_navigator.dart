@@ -11,10 +11,10 @@ class AppNavigator extends StatefulWidget {
   const AppNavigator({Key? key}) : super(key: key);
 
   @override
-  _AppNavigatorState createState() => _AppNavigatorState();
+  AppNavigatorState createState() => AppNavigatorState();
 }
 
-class _AppNavigatorState extends State<AppNavigator> {
+class AppNavigatorState extends State<AppNavigator> {
   final PageController _pageController = PageController();
   int _currentTab = 0;
   bool _isPageChanging = false;
@@ -34,7 +34,24 @@ class _AppNavigatorState extends State<AppNavigator> {
   }
 
   void _changePage(int index) {
-    if (_currentTab == index) return;
+    if (_currentTab == index) {
+      // If clicking the current tab, reset to root and scroll to top
+      _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+
+      // Find and scroll the first scrollable widget to top
+      final context = _navigatorKeys[index].currentContext;
+      if (context != null) {
+        final scrollable = Scrollable.of(context);
+        if (scrollable != null) {
+          scrollable.position.animateTo(
+            0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      }
+      return;
+    }
 
     setState(() {
       _isPageChanging = true;

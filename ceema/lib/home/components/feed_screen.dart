@@ -15,6 +15,40 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../screens/compose_post_screen.dart';
 import 'app_bar.dart';
 
+class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+  final double minHeight;
+  final double maxHeight;
+
+  _SliverAppBarDelegate({
+    required this.child,
+    required this.minHeight,
+    required this.maxHeight,
+  });
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return SizedBox.expand(child: child);
+  }
+
+  @override
+  double get maxExtent => maxHeight;
+
+  @override
+  double get minExtent => minHeight;
+
+  @override
+  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) {
+    return maxHeight != oldDelegate.maxHeight ||
+        minHeight != oldDelegate.minHeight ||
+        child != oldDelegate.child;
+  }
+}
+
 class SeamlessFeedScreen extends StatefulWidget {
   const SeamlessFeedScreen({Key? key}) : super(key: key);
 
@@ -27,6 +61,11 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
   final GlobalKey<RefreshIndicatorState> _refreshIndicatorKey =
       GlobalKey<RefreshIndicatorState>();
   bool _isLoading = false;
+  final PageController _pageController = PageController();
+  bool _isFilterVisible = true;
+  double _lastScrollPosition = 0;
+  bool _isAtTop = true;
+  bool _isScrollingDown = false;
 
   // Feed filter state
   String _selectedFeedFilter = 'all'; // 'all', 'friends', 'forYou'
@@ -40,6 +79,10 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
   bool _showTrendingMoviesSection = true;
   final ScrollController _scrollController = ScrollController();
 
+  // Cache for For You recommendations
+  List<Post> _cachedForYouPosts = [];
+  bool _isForYouLoading = false;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -47,14 +90,46 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
   void initState() {
     super.initState();
     _checkUserPreferences();
+    _loadForYouRecommendations();
+    _scrollController.addListener(_onScroll);
     debugPrint('Current User: ${_auth.currentUser?.displayName}');
     debugPrint('Current User Email: ${_auth.currentUser?.email}');
     debugPrint('Current User UID: ${_auth.currentUser?.uid}');
   }
 
+  void _onScroll() {
+    final double scrollDelta =
+        _scrollController.position.pixels - _lastScrollPosition;
+    final bool isAtTop = _scrollController.position.pixels <= 0;
+
+    // Check if we're at top and scrolling down
+    if (isAtTop && scrollDelta > 0 && !_isLoading) {
+      _refreshFeed();
+    }
+
+    // Update filter visibility
+    if (scrollDelta > 10 && _isFilterVisible) {
+      setState(() {
+        _isFilterVisible = false;
+      });
+    } else if (scrollDelta < -10 && !_isFilterVisible) {
+      setState(() {
+        _isFilterVisible = true;
+      });
+    }
+
+    setState(() {
+      _isAtTop = isAtTop;
+      _isScrollingDown = scrollDelta > 0;
+    });
+    _lastScrollPosition = _scrollController.position.pixels;
+  }
+
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -64,10 +139,41 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
     });
   }
 
+  Future<void> _loadForYouRecommendations() async {
+    if (_isForYouLoading) return;
+
+    setState(() {
+      _isForYouLoading = true;
+    });
+
+    try {
+      final recommendations = await _recommendationService.getRecommendedPosts(
+        limit: 20,
+      );
+      if (mounted) {
+        setState(() {
+          _cachedForYouPosts = recommendations;
+          _isForYouLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading recommendations: $e');
+      if (mounted) {
+        setState(() {
+          _isForYouLoading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _refreshFeed() async {
-    if (!mounted) return;
+    if (!mounted || _isLoading) return;
     setState(() => _isLoading = true);
     try {
+      // Only refresh For You recommendations if we're on that tab
+      if (_selectedFeedFilter == 'forYou') {
+        await _loadForYouRecommendations();
+      }
       await Future.delayed(const Duration(milliseconds: 1000));
     } catch (e) {
       debugPrint('Error refreshing feed: $e');
@@ -81,6 +187,51 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
       context,
       MaterialPageRoute(builder: (context) => const ComposePostScreen()),
     );
+  }
+
+  void _onPageChanged(int index) {
+    setState(() {
+      switch (index) {
+        case 0:
+          _selectedFeedFilter = 'all';
+          break;
+        case 1:
+          _selectedFeedFilter = 'forYou';
+          break;
+        case 2:
+          _selectedFeedFilter = 'following';
+          break;
+      }
+    });
+  }
+
+  void _onTabSelected(String filter) {
+    setState(() {
+      _selectedFeedFilter = filter;
+      switch (filter) {
+        case 'all':
+          _pageController.animateToPage(
+            0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+          break;
+        case 'forYou':
+          _pageController.animateToPage(
+            1,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+          break;
+        case 'following':
+          _pageController.animateToPage(
+            2,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+          break;
+      }
+    });
   }
 
   Widget _buildCreatePostCard(ColorScheme colorScheme) {
@@ -167,133 +318,183 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
     );
   }
 
-  Widget _buildFeedFilter(ColorScheme colorScheme) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(
-            color: colorScheme.outlineVariant.withOpacity(0.5),
-            width: 0.5,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          _buildFilterTab(
-            label: 'All',
-            isSelected: _selectedFeedFilter == 'all',
-            onTap: () => setState(() => _selectedFeedFilter = 'all'),
-          ),
-          _buildFilterTab(
-            label: 'For You',
-            isSelected: _selectedFeedFilter == 'forYou',
-            onTap: () => setState(() => _selectedFeedFilter = 'forYou'),
-          ),
-          _buildFilterTab(
-            label: 'Following',
-            isSelected: _selectedFeedFilter == 'following',
-            onTap: () => setState(() => _selectedFeedFilter = 'following'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterTab({
-    required String label,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color:
-                    isSelected
-                        ? Theme.of(context).colorScheme.secondary
-                        : Colors.transparent,
-                width: 2,
-              ),
-            ),
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color:
-                  isSelected
-                      ? Theme.of(context).colorScheme.secondary
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      body: RefreshIndicator(
-        key: _refreshIndicatorKey,
-        onRefresh: _refreshFeed,
-        child: CustomScrollView(
-          controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            // App Bar
-            const CeemaAppBar(),
+      body: SafeArea(
+        child: RefreshIndicator(
+          key: _refreshIndicatorKey,
+          onRefresh: _refreshFeed,
+          child: CustomScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              // App Bar
+              const CeemaAppBar(),
 
-            // Loading indicator
-            if (_isLoading)
-              SliverToBoxAdapter(
-                child: LinearProgressIndicator(
-                  backgroundColor: colorScheme.surfaceVariant,
-                  color: colorScheme.primary,
+              // Loading indicator
+              if (_isLoading)
+                SliverToBoxAdapter(
+                  child: LinearProgressIndicator(
+                    backgroundColor: colorScheme.surfaceVariant,
+                    color: colorScheme.primary,
+                  ),
+                ),
+
+              // Filter tabs in SliverAppBar
+              SliverAppBar(
+                pinned: false,
+                floating: true,
+                snap: true,
+                toolbarHeight: 56,
+                elevation: 0,
+                backgroundColor: Theme.of(context).colorScheme.surface,
+                automaticallyImplyLeading: false,
+                title: Container(
+                  height: 56,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                        color: colorScheme.outlineVariant.withOpacity(0.5),
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      _buildFilterTab(
+                        label: 'All',
+                        isSelected: _selectedFeedFilter == 'all',
+                        onTap: () => _onTabSelected('all'),
+                      ),
+                      _buildFilterTab(
+                        label: 'For You',
+                        isSelected: _selectedFeedFilter == 'forYou',
+                        onTap: () => _onTabSelected('forYou'),
+                      ),
+                      _buildFilterTab(
+                        label: 'Following',
+                        isSelected: _selectedFeedFilter == 'following',
+                        onTap: () => _onTabSelected('following'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
 
-            // Feed filter tabs
-            SliverToBoxAdapter(child: _buildFeedFilter(colorScheme)),
-
-            // Trending Movies - Only show in 'all' and 'forYou' tabs
-            if (_showTrendingMoviesSection &&
-                (_selectedFeedFilter == 'all' ||
-                    _selectedFeedFilter == 'forYou'))
-              const SliverToBoxAdapter(child: TrendingMoviesSection()),
-
-            // Post Stream
-            _selectedFeedFilter == 'forYou'
-                ? StreamBuilder<List<Post>>(
-                  stream:
-                      _recommendationService
-                          .getRecommendedPosts(limit: 20)
-                          .asStream(),
-                  builder: _buildPostStreamContent,
-                )
-                : _selectedFeedFilter == 'following'
-                ? StreamBuilder<List<Post>>(
-                  stream: _postService.getFollowingPosts(
-                    _auth.currentUser!.uid,
-                  ),
-                  builder: _buildPostStreamContent,
-                )
-                : StreamBuilder<List<Post>>(
-                  stream: _postService.getPosts(),
-                  builder: _buildPostStreamContent,
+              // Content based on selected tab
+              SliverFillRemaining(
+                child: PageView(
+                  controller: _pageController,
+                  onPageChanged: _onPageChanged,
+                  children: [
+                    // All tab content
+                    CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        if (_showTrendingMoviesSection)
+                          const SliverToBoxAdapter(
+                            child: TrendingMoviesSection(),
+                          ),
+                        StreamBuilder<List<Post>>(
+                          stream: _postService.getPosts(),
+                          builder: _buildPostStreamContent,
+                        ),
+                      ],
+                    ),
+                    // For You tab content
+                    CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        if (_showTrendingMoviesSection)
+                          const SliverToBoxAdapter(
+                            child: TrendingMoviesSection(),
+                          ),
+                        if (_isForYouLoading)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.all(32.0),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.local_fire_department,
+                                    size: 48,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary.withOpacity(0.5),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Personalizing your feed',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color:
+                                          Theme.of(
+                                            context,
+                                          ).colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'We\'re finding the best content for you',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color:
+                                          Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  CircularProgressIndicator(
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        else
+                          SliverList(
+                            delegate: SliverChildBuilderDelegate((
+                              context,
+                              index,
+                            ) {
+                              if (index == _cachedForYouPosts.length) {
+                                return const SizedBox(height: 80);
+                              }
+                              return SeamlessPostCard(
+                                post: _cachedForYouPosts[index],
+                                relevanceReason:
+                                    'Recommended based on your preferences',
+                              );
+                            }, childCount: _cachedForYouPosts.length + 1),
+                          ),
+                      ],
+                    ),
+                    // Following tab content
+                    CustomScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        StreamBuilder<List<Post>>(
+                          stream: _postService.getFollowingPosts(
+                            _auth.currentUser!.uid,
+                          ),
+                          builder: _buildPostStreamContent,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
       floatingActionButton: FloatingActionButton(
@@ -412,6 +613,44 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
           );
         },
         childCount: snapshot.data!.length + 1, // +1 for bottom padding
+      ),
+    );
+  }
+
+  Widget _buildFilterTab({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color:
+                    isSelected
+                        ? Theme.of(context).colorScheme.secondary
+                        : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color:
+                  isSelected
+                      ? Theme.of(context).colorScheme.secondary
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+        ),
       ),
     );
   }

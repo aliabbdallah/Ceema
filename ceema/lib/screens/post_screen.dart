@@ -16,7 +16,9 @@ class PostScreen extends StatelessWidget {
       body: CustomScrollView(
         slivers: [
           // Post content
-          SliverToBoxAdapter(child: SeamlessPostCard(post: post)),
+          SliverToBoxAdapter(
+            child: SeamlessPostCard(post: post, isClickable: false),
+          ),
 
           // Comments section
           SliverToBoxAdapter(

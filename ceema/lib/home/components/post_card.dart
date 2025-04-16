@@ -16,12 +16,14 @@ class SeamlessPostCard extends StatefulWidget {
   final Post post;
   final bool isHighlighted;
   final String? relevanceReason;
+  final bool isClickable;
 
   const SeamlessPostCard({
     Key? key,
     required this.post,
     this.isHighlighted = false,
     this.relevanceReason,
+    this.isClickable = true,
   }) : super(key: key);
 
   @override
@@ -242,14 +244,17 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PostScreen(post: widget.post),
-          ),
-        );
-      },
+      onTap:
+          widget.isClickable
+              ? () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PostScreen(post: widget.post),
+                  ),
+                );
+              }
+              : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
