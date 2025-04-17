@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import '../models/watchlist_item.dart';
 import '../services/watchlist_service.dart';
 import '../widgets/star_rating.dart';
 import 'movie_details_screen.dart';
 import 'diary_entry_form.dart';
 import '../services/movie_rating_service.dart';
+import 'package:rxdart/rxdart.dart';
 
 class WatchlistScreen extends StatefulWidget {
   final String userId;
@@ -25,6 +27,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   final WatchlistService _watchlistService = WatchlistService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final MovieRatingService _movieRatingService = MovieRatingService();
+  final BehaviorSubject<List<WatchlistItem>> _watchlistSubject =
+      BehaviorSubject<List<WatchlistItem>>();
+  StreamSubscription? _watchlistSubscription;
 
   List<WatchlistItem> _watchlistItems = [];
   bool _isLoading = true;
@@ -64,41 +69,49 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   @override
   void initState() {
     super.initState();
-    _loadWatchlist();
+    _setupWatchlistStream();
   }
 
-  Future<void> _loadWatchlist() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final items = await _watchlistService.getFilteredWatchlist(
-        userId: widget.userId,
-        genre: _selectedGenre,
-        year: _selectedYear,
-        sortBy: _sortBy,
-        descending: _sortDescending,
-      );
-
-      setState(() {
-        _watchlistItems = items;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading watchlist: $e'),
-            backgroundColor: Colors.red,
-          ),
+  void _setupWatchlistStream() {
+    _watchlistSubscription = _watchlistService
+        .getFilteredWatchlistStream(
+          userId: widget.userId,
+          genre: _selectedGenre,
+          year: _selectedYear,
+          sortBy: _sortBy,
+          descending: _sortDescending,
+        )
+        .listen(
+          (items) {
+            if (mounted) {
+              setState(() {
+                _watchlistItems = items;
+                _isLoading = false;
+              });
+              _watchlistSubject.add(items);
+            }
+          },
+          onError: (error) {
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error loading watchlist: $error'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          },
         );
-      }
-    }
+  }
+
+  @override
+  void dispose() {
+    _watchlistSubscription?.cancel();
+    _watchlistSubject.close();
+    super.dispose();
   }
 
   void _showFilterDialog() {
@@ -179,11 +192,14 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                 TextButton(
                   onPressed: () {
                     Navigator.pop(context);
-                    setState(() {
-                      _selectedGenre = tempGenre;
-                      _selectedYear = tempYear;
-                    });
-                    _loadWatchlist();
+                    if (mounted) {
+                      setState(() {
+                        _selectedGenre = tempGenre;
+                        _selectedYear = tempYear;
+                      });
+                      _watchlistSubscription?.cancel();
+                      _setupWatchlistStream();
+                    }
                   },
                   child: const Text('Apply'),
                 ),
@@ -263,11 +279,14 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                 TextButton(
                   onPressed: () {
                     Navigator.pop(context);
-                    setState(() {
-                      _sortBy = tempSortBy;
-                      _sortDescending = tempSortDescending;
-                    });
-                    _loadWatchlist();
+                    if (mounted) {
+                      setState(() {
+                        _sortBy = tempSortBy;
+                        _sortDescending = tempSortDescending;
+                      });
+                      _watchlistSubscription?.cancel();
+                      _setupWatchlistStream();
+                    }
                   },
                   child: const Text('Apply'),
                 ),
@@ -319,7 +338,8 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                           item.id,
                           widget.userId,
                         );
-                        _loadWatchlist();
+                        _watchlistSubscription?.cancel();
+                        _setupWatchlistStream();
                       });
                 },
               ),
@@ -332,7 +352,8 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     item.id,
                     widget.userId,
                   );
-                  _loadWatchlist();
+                  _watchlistSubscription?.cancel();
+                  _setupWatchlistStream();
 
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -433,7 +454,8 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                                         item.id,
                                         widget.userId,
                                       );
-                                      _loadWatchlist();
+                                      _watchlistSubscription?.cancel();
+                                      _setupWatchlistStream();
                                     });
                               },
                               tooltip: 'Mark as watched',
@@ -445,7 +467,8 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                                   item.id,
                                   widget.userId,
                                 );
-                                _loadWatchlist();
+                                _watchlistSubscription?.cancel();
+                                _setupWatchlistStream();
                               },
                               tooltip: 'Remove from watchlist',
                             ),

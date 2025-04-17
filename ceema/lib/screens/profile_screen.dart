@@ -1,6 +1,7 @@
 // home/components/profile_screen.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import '../services/post_service.dart';
 import '../services/profile_service.dart';
 import '../services/diary_service.dart';
@@ -22,6 +23,7 @@ import 'podium_edit_screen.dart';
 import '../widgets/podium_widget.dart';
 import '../screens/movie_details_screen.dart';
 import 'watched_movies_screen.dart';
+import 'package:rxdart/rxdart.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String userId;
@@ -45,16 +47,31 @@ class _ProfileScreenState extends State<ProfileScreen>
   final DiaryService _diaryService = DiaryService();
   late TabController _tabController;
   String _selectedTab = 'posts';
+  late BehaviorSubject<UserModel> _userSubject;
+  StreamSubscription? _userSubscription;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _userSubject = BehaviorSubject<UserModel>();
+    _setupUserStream();
+  }
+
+  void _setupUserStream() {
+    _userSubscription = _profileService
+        .getUserProfileStream(widget.userId)
+        .listen(
+          (user) => _userSubject.add(user),
+          onError: (error) => _userSubject.addError(error),
+        );
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _userSubscription?.cancel();
+    _userSubject.close();
     super.dispose();
   }
 
@@ -214,7 +231,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
+                        color: Theme.of(context).colorScheme.secondary,
                       ),
                     ),
                   ),
@@ -227,142 +244,156 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildProfileStats(UserModel user) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                InkWell(
-                  onTap:
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (context) =>
-                                  FollowingScreen(targetUserId: widget.userId),
-                        ),
-                      ),
-                  child: _buildStatColumn('Following', user.followingCount),
-                ),
-                InkWell(
-                  onTap:
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder:
-                              (context) =>
-                                  FollowersScreen(targetUserId: widget.userId),
-                        ),
-                      ),
-                  child: _buildStatColumn('Followers', user.followersCount),
-                ),
-                InkWell(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (context) => WatchlistScreen(
-                              userId: widget.userId,
-                              isCurrentUser: widget.isCurrentUser,
-                            ),
-                      ),
-                    );
-                  },
-                  child: _buildStatColumn('Watchlist', user.watchlistCount),
-                ),
-                InkWell(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (context) => WatchedMoviesScreen(
-                              userId: widget.userId,
-                              isCurrentUser: widget.isCurrentUser,
-                            ),
-                      ),
-                    );
-                  },
-                  child: _buildStatColumn('Watched', user.watchedCount),
-                ),
-              ],
+  Widget _buildStatItem(String label, int value, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              value.toString(),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileStats(UserModel user) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildStatItem('Following', user.followingCount, () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder:
+                    (context) => FollowingScreen(targetUserId: widget.userId),
+              ),
+            );
+          }),
+          _buildStatItem('Followers', user.followersCount, () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder:
+                    (context) => FollowersScreen(targetUserId: widget.userId),
+              ),
+            );
+          }),
+          _buildStatItem('Watchlist', user.watchlistCount, () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder:
+                    (context) => WatchlistScreen(
+                      userId: widget.userId,
+                      isCurrentUser: widget.isCurrentUser,
+                    ),
+              ),
+            );
+          }),
+          _buildStatItem('Watched', user.watchedCount ?? 0, () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder:
+                    (context) => WatchedMoviesScreen(
+                      userId: widget.userId,
+                      isCurrentUser: widget.isCurrentUser,
+                    ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPodiumSection(UserModel user) {
+    bool hasPodium = user.podiumMovies.isNotEmpty;
+
+    if (!hasPodium && !widget.isCurrentUser) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Podium',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
-          if (user.podiumMovies.isNotEmpty || widget.isCurrentUser) ...[
-            const Divider(),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child:
-                  user.podiumMovies.isNotEmpty
-                      ? PodiumWidget(
-                        movies: user.podiumMovies,
-                        isEditable: widget.isCurrentUser,
-                        onMovieTap: (movie) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder:
-                                  (context) => MovieDetailsScreen(
-                                    movie: Movie(
-                                      id: movie.tmdbId,
-                                      title: movie.title,
-                                      posterUrl: movie.posterUrl,
-                                      year: '',
-                                      overview: '',
-                                    ),
-                                  ),
+          const SizedBox(height: 8),
+          hasPodium
+              ? PodiumWidget(
+                movies: user.podiumMovies,
+                isEditable: widget.isCurrentUser,
+                onMovieTap: (movie) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (context) => MovieDetailsScreen(
+                            movie: Movie(
+                              id: movie.tmdbId,
+                              title: movie.title,
+                              posterUrl: movie.posterUrl,
+                              year: '',
+                              overview: '',
                             ),
-                          );
-                        },
-                        onRankTap:
-                            widget.isCurrentUser
-                                ? (rank) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder:
-                                          (context) => const PodiumEditScreen(),
-                                    ),
-                                  );
-                                }
-                                : null,
-                      )
-                      : ElevatedButton.icon(
-                        icon: const Icon(Icons.add),
-                        label: const Text('Create Your Podium'),
-                        onPressed: () {
+                          ),
+                    ),
+                  );
+                },
+                onRankTap:
+                    widget.isCurrentUser
+                        ? (rank) {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => const PodiumEditScreen(),
                             ),
                           );
-                        },
+                        }
+                        : null,
+              )
+              : Center(
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Set Up Your Podium'),
+                  style: ElevatedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PodiumEditScreen(),
                       ),
-            ),
-          ],
+                    );
+                  },
+                ),
+              ),
         ],
       ),
-    );
-  }
-
-  Widget _buildStatColumn(String label, int count) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          count.toString(),
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-      ],
     );
   }
 
@@ -408,53 +439,8 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-        leading:
-            widget.isCurrentUser
-                ? null
-                : IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () => Navigator.pop(context),
-                ),
-        actions: [
-          if (widget.isCurrentUser) ...[
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ProfileEditScreen(),
-                    ),
-                  ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.person_add),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const FollowRequestsScreen(),
-                  ),
-                );
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.settings),
-              onPressed:
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const SettingsScreen(),
-                    ),
-                  ),
-            ),
-          ],
-        ],
-      ),
       body: StreamBuilder<UserModel>(
-        stream: _profileService.getUserProfileStream(widget.userId),
+        stream: _userSubject.stream,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(child: Text('Error: ${snapshot.error}'));
@@ -468,20 +454,70 @@ class _ProfileScreenState extends State<ProfileScreen>
 
           return CustomScrollView(
             slivers: [
+              SliverAppBar(
+                title: Text(user.username),
+                pinned: true,
+                actions: [
+                  if (widget.isCurrentUser) ...[
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined),
+                      tooltip: 'Edit Profile',
+                      onPressed:
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ProfileEditScreen(),
+                            ),
+                          ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.notifications_active_outlined),
+                      tooltip: 'Follow Requests',
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const FollowRequestsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.settings_outlined),
+                      tooltip: 'Settings',
+                      onPressed:
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SettingsScreen(),
+                            ),
+                          ),
+                    ),
+                  ],
+                ],
+                bottom: PreferredSize(
+                  preferredSize: const Size.fromHeight(1.0),
+                  child: Container(
+                    color: Theme.of(context).dividerColor.withOpacity(0.1),
+                    height: 1.0,
+                  ),
+                ),
+              ),
               SliverToBoxAdapter(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                     ProfileImageWidget(
                       imageUrl: user.profileImageUrl,
                       radius: 50,
                       fallbackName: user.username,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Text(
                       user.displayName ?? user.username,
-                      style: Theme.of(context).textTheme.titleLarge,
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -489,7 +525,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.secondary,
                         fontSize: 16,
-                        fontWeight: FontWeight.w500,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -499,13 +534,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                         child: Text(
                           user.bio!,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.grey),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.grey[700]),
                         ),
                       ),
                       const SizedBox(height: 16),
                     ],
                     _buildProfileStats(user),
-                    const SizedBox(height: 16),
+                    _buildPodiumSection(user),
                     TabBar(
                       controller: _tabController,
                       onTap: (index) {
@@ -515,15 +551,19 @@ class _ProfileScreenState extends State<ProfileScreen>
                       },
                       tabs: const [Tab(text: 'Posts'), Tab(text: 'Diary')],
                       labelColor: Theme.of(context).colorScheme.secondary,
-                      unselectedLabelColor: Theme.of(
-                        context,
-                      ).colorScheme.secondary.withOpacity(0.5),
+                      unselectedLabelColor: Colors.grey[600],
                       indicatorColor: Theme.of(context).colorScheme.secondary,
+                      indicatorWeight: 3.0,
                     ),
-                    const SizedBox(height: 16),
-                    _selectedTab == 'posts'
-                        ? _buildPostList()
-                        : _buildDiaryList(),
+                    const Divider(height: 1, thickness: 1),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      child:
+                          _selectedTab == 'posts'
+                              ? _buildPostList()
+                              : _buildDiaryList(),
+                    ),
+                    const SizedBox(height: 30),
                   ],
                 ),
               ),

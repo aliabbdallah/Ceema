@@ -8,7 +8,7 @@ class ProfileImageWidget extends StatelessWidget {
   const ProfileImageWidget({
     Key? key,
     required this.imageUrl,
-    this.radius = 50,
+    this.radius = 100,
     this.fallbackName = '',
   }) : super(key: key);
 

@@ -105,36 +105,47 @@ class _CommentListState extends State<CommentList> {
                 return const SizedBox.shrink();
               }
 
-              return Column(
-                children:
-                    comments.map((comment) {
-                      return CommentCard(
-                        comment: comment,
-                        onDelete: () async {
-                          try {
-                            await _postService.deleteComment(
-                              comment['id'],
-                              widget.postId,
-                            );
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Comment deleted'),
-                                ),
-                              );
-                            }
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error deleting comment: $e'),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                      );
-                    }).toList(),
+              // Generate list with dividers
+              List<Widget> commentWidgets = [];
+              for (int i = 0; i < comments.length; i++) {
+                commentWidgets.add(
+                  CommentCard(
+                    comment: comments[i],
+                    onDelete: () async {
+                      try {
+                        await _postService.deleteComment(
+                          comments[i]['id'],
+                          widget.postId,
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Comment deleted')),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error deleting comment: $e'),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                );
+                if (i < comments.length - 1) {
+                  commentWidgets.add(
+                    const Divider(height: 1, thickness: 0.5),
+                  ); // Add Divider
+                }
+              }
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Column(
+                  children: commentWidgets, // Use the generated list
+                ),
               );
             },
           ),
@@ -248,16 +259,16 @@ class _CommentListState extends State<CommentList> {
                 return const SizedBox.shrink();
               }
 
-              return ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: comments.length,
-                itemBuilder: (context, index) {
-                  return CommentCard(
-                    comment: comments[index],
+              // Generate list with dividers for non-embedded view
+              List<Widget> commentWidgetsNonEmbedded = [];
+              for (int i = 0; i < comments.length; i++) {
+                commentWidgetsNonEmbedded.add(
+                  CommentCard(
+                    comment: comments[i],
                     onDelete: () async {
                       try {
                         await _postService.deleteComment(
-                          comments[index]['id'],
+                          comments[i]['id'],
                           widget.postId,
                         );
                         if (mounted) {
@@ -275,8 +286,23 @@ class _CommentListState extends State<CommentList> {
                         }
                       }
                     },
-                  );
-                },
+                  ),
+                );
+                if (i < comments.length - 1) {
+                  commentWidgetsNonEmbedded.add(
+                    const Divider(height: 1, thickness: 0.5),
+                  ); // Add Divider
+                }
+              }
+
+              // Note: Using a ListView inside an Expanded Column is often inefficient.
+              // Consider refactoring if performance issues arise.
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: ListView(
+                  // Changed from Column to ListView for potential scrolling
+                  children: commentWidgetsNonEmbedded, // Use the generated list
+                ),
               );
             },
           ),

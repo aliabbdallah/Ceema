@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:async/async.dart'; // Import async package
 import '../models/follow.dart';
 import '../models/user.dart';
 import 'notification_service.dart';
@@ -9,97 +10,105 @@ class FollowService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final NotificationService _notificationService = NotificationService();
 
-  // Cache for follows
-  final Map<String, List<Follow>> _followsCache = {};
-  final Map<String, DocumentSnapshot?> _lastFollowDocCache = {};
+  // Helper function to fetch user profile image URL
+  Future<String?> _getUserProfileImageUrl(String userId) async {
+    try {
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        return userDoc.data()?['profileImageUrl'];
+      }
+    } catch (e) {
+      print("Error fetching profile image for user $userId: $e");
+    }
+    return null;
+  }
 
-  // Cache for follow relationships
-  final Map<String, bool> _followRelationshipCache = {};
+  // Helper function to fetch username
+  Future<String> _getUserName(String userId, String fallbackName) async {
+    try {
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (userDoc.exists && userDoc.data()?.containsKey('username') == true) {
+        return userDoc.data()!['username'] as String;
+      }
+    } catch (e) {
+      print("Error fetching username for user $userId: $e");
+    }
+    // Return the name stored in the follow doc as a fallback
+    return fallbackName;
+  }
 
-  // Get followers with pagination
-  Stream<List<Follow>> getFollowers(
-    String userId, {
-    int limit = 20,
-    DocumentSnapshot? startAfter,
-  }) {
+  // Get followers with profile images and latest names
+  Stream<List<Follow>> getFollowers(String userId) {
     Query query = _firestore
         .collection('follows')
         .where('followedId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .limit(limit);
+        .orderBy('createdAt', descending: true);
 
-    if (startAfter != null) {
-      query = query.startAfterDocument(startAfter);
-    }
+    return query.snapshots().asyncMap((snapshot) async {
+      final follows = <Follow>[];
+      for (final doc in snapshot.docs) {
+        final followData = doc.data() as Map<String, dynamic>;
+        final followerId = followData['followerId'];
 
-    return query.snapshots().map((snapshot) {
-      final follows =
-          snapshot.docs
-              .map(
-                (doc) =>
-                    Follow.fromJson(doc.data() as Map<String, dynamic>, doc.id),
-              )
-              .toList();
+        // Fetch latest avatar and name
+        final followerProfileImageUrl = await _getUserProfileImageUrl(
+          followerId,
+        );
+        // Pass the potentially outdated name as a fallback
+        final followerName = await _getUserName(
+          followerId,
+          followData['followerName'] ?? 'User',
+        );
 
-      // Update cache
-      _followsCache['followers_$userId'] = follows;
-      if (snapshot.docs.isNotEmpty) {
-        _lastFollowDocCache['followers_$userId'] = snapshot.docs.last;
+        // Create Follow object with updated avatar and name
+        follows.add(
+          Follow.fromJson(followData, doc.id).copyWith(
+            followerAvatar: followerProfileImageUrl, // Update with fetched URL
+            followerName: followerName, // Update with fetched name
+          ),
+        );
       }
-
       return follows;
     });
   }
 
-  // Get following with pagination
-  Stream<List<Follow>> getFollowing(
-    String userId, {
-    int limit = 20,
-    DocumentSnapshot? startAfter,
-  }) {
+  // Get following with profile images and latest names
+  Stream<List<Follow>> getFollowing(String userId) {
     Query query = _firestore
         .collection('follows')
         .where('followerId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .limit(limit);
+        .orderBy('createdAt', descending: true);
 
-    if (startAfter != null) {
-      query = query.startAfterDocument(startAfter);
-    }
+    return query.snapshots().asyncMap((snapshot) async {
+      final follows = <Follow>[];
+      for (final doc in snapshot.docs) {
+        final followData = doc.data() as Map<String, dynamic>;
+        final followedId = followData['followedId'];
 
-    return query.snapshots().map((snapshot) {
-      final follows =
-          snapshot.docs
-              .map(
-                (doc) =>
-                    Follow.fromJson(doc.data() as Map<String, dynamic>, doc.id),
-              )
-              .toList();
+        // Fetch latest avatar and name
+        final followedProfileImageUrl = await _getUserProfileImageUrl(
+          followedId,
+        );
+        // Pass the potentially outdated name as a fallback
+        final followedName = await _getUserName(
+          followedId,
+          followData['followedName'] ?? 'User',
+        );
 
-      // Update cache
-      _followsCache['following_$userId'] = follows;
-      if (snapshot.docs.isNotEmpty) {
-        _lastFollowDocCache['following_$userId'] = snapshot.docs.last;
+        // Create Follow object with updated avatar and name
+        follows.add(
+          Follow.fromJson(followData, doc.id).copyWith(
+            followedAvatar: followedProfileImageUrl, // Update with fetched URL
+            followedName: followedName, // Update with fetched name
+          ),
+        );
       }
-
       return follows;
     });
   }
 
-  // Get cached followers
-  List<Follow>? getCachedFollowers(String userId) {
-    return _followsCache['followers_$userId'];
-  }
-
-  // Get cached following
-  List<Follow>? getCachedFollowing(String userId) {
-    return _followsCache['following_$userId'];
-  }
-
-  // Get last document for pagination
-  DocumentSnapshot? getLastFollowDoc(String cacheKey) {
-    return _lastFollowDocCache[cacheKey];
-  }
+  // Cache for follow relationships
+  final Map<String, bool> _followRelationshipCache = {};
 
   // Check if following with caching
   Future<bool> isFollowing(String targetId) async {
@@ -152,7 +161,7 @@ class FollowService {
       final currentUser = _auth.currentUser;
       if (currentUser == null) return;
 
-      // Clear cache before making changes
+      // Clear relationship cache before making changes
       clearFollowCache(targetId);
 
       // Prevent users from following themselves
@@ -166,33 +175,38 @@ class FollowService {
               .collection('follows')
               .where('followerId', isEqualTo: currentUser.uid)
               .where('followedId', isEqualTo: targetId)
+              .limit(1) // Optimized to limit(1)
               .get();
 
       if (existingFollow.docs.isNotEmpty) return;
 
-      // Fetch current user's profile from Firestore
+      // Fetch current user's profile from Firestore for name/avatar
       final currentUserDoc =
           await _firestore.collection('users').doc(currentUser.uid).get();
       final currentUserData = currentUserDoc.data() ?? {};
+      final currentUsername =
+          currentUserData['username'] ??
+          currentUser.displayName ??
+          'Unknown User';
+      final currentUserAvatar =
+          currentUserData['profileImageUrl'] ?? currentUser.photoURL;
 
-      // Fetch target user's profile from Firestore
+      // Fetch target user's profile from Firestore for name/avatar
       final targetUserDoc =
           await _firestore.collection('users').doc(targetId).get();
       final targetUserData = targetUserDoc.data() ?? {};
+      final targetUsername = targetUserData['username'] ?? 'User';
+      final targetUserAvatar = targetUserData['profileImageUrl'];
 
       // Create follow relationship
       final follow = Follow(
-        id: '',
+        id: '', // Firestore will generate ID
         followerId: currentUser.uid,
-        followerName:
-            currentUserData['username'] ??
-            currentUser.displayName ??
-            'Unknown User',
-        followerAvatar:
-            currentUserData['profileImageUrl'] ?? currentUser.photoURL ?? '',
+        followerName: currentUsername,
+        followerAvatar: currentUserAvatar, // Use fetched avatar
         followedId: targetId,
-        followedName: targetUserData['username'] ?? 'User',
-        followedAvatar: targetUserData['profileImageUrl'] ?? '',
+        followedName: targetUsername,
+        followedAvatar: targetUserAvatar, // Use fetched avatar
         createdAt: DateTime.now(),
       );
 
@@ -202,20 +216,12 @@ class FollowService {
       await _notificationService.createFollowNotification(
         recipientUserId: targetId,
         senderUserId: currentUser.uid,
-        senderName:
-            currentUserData['username'] ??
-            currentUser.displayName ??
-            'Unknown User',
-        senderPhotoUrl:
-            currentUserData['profileImageUrl'] ?? currentUser.photoURL ?? '',
+        senderName: currentUsername,
+        senderPhotoUrl: currentUserAvatar ?? '', // Provide fetched avatar
       );
-
-      // Clear cache
-      _followsCache.remove('following_${currentUser.uid}');
-      _followsCache.remove('followers_$targetId');
     } catch (e) {
       print('Error following user: $e');
-      rethrow;
+      rethrow; // Rethrow to allow UI to handle error
     }
   }
 
@@ -225,6 +231,9 @@ class FollowService {
       final currentUser = _auth.currentUser;
       if (currentUser == null) return;
 
+      // Clear relationship cache
+      clearFollowCache(targetId);
+
       // Find and delete follow relationship
       final followQuery =
           await _firestore
@@ -233,32 +242,30 @@ class FollowService {
               .where('followedId', isEqualTo: targetId)
               .get();
 
+      // Use a batch write for potential multiple docs (though unlikely with limit(1))
+      final batch = _firestore.batch();
       for (var doc in followQuery.docs) {
-        await doc.reference.delete();
+        batch.delete(doc.reference);
       }
-
-      // Clear cache
-      _followsCache.remove('following_${currentUser.uid}');
-      _followsCache.remove('followers_$targetId');
+      await batch.commit();
     } catch (e) {
       print('Error unfollowing user: $e');
-      rethrow;
+      rethrow; // Rethrow for UI handling
     }
   }
 
   // Get follower count
   Future<int> getFollowerCount(String userId) async {
     try {
-      final snapshot =
+      final querySnapshot =
           await _firestore
               .collection('follows')
               .where('followedId', isEqualTo: userId)
-              .count()
+              .count() // Use aggregate count
               .get();
-
-      return snapshot.count ?? 0;
+      return querySnapshot.count ?? 0;
     } catch (e) {
-      print('Error getting follower count: $e');
+      print("Error getting follower count: $e");
       return 0;
     }
   }
@@ -266,16 +273,49 @@ class FollowService {
   // Get following count
   Future<int> getFollowingCount(String userId) async {
     try {
-      final snapshot =
+      final querySnapshot =
           await _firestore
               .collection('follows')
               .where('followerId', isEqualTo: userId)
-              .count()
+              .count() // Use aggregate count
               .get();
-
-      return snapshot.count ?? 0;
+      return querySnapshot.count ?? 0;
     } catch (e) {
-      print('Error getting following count: $e');
+      print("Error getting following count: $e");
+      return 0;
+    }
+  }
+
+  // Get mutual friends count
+  Future<int> getMutualFriendsCount(String userId1, String userId2) async {
+    try {
+      // Get users followed by userId1
+      final following1Snapshot =
+          await _firestore
+              .collection('follows')
+              .where('followerId', isEqualTo: userId1)
+              .get();
+      final following1Ids =
+          following1Snapshot.docs
+              .map((doc) => doc['followedId'] as String)
+              .toSet();
+
+      // Get users followed by userId2
+      final following2Snapshot =
+          await _firestore
+              .collection('follows')
+              .where('followerId', isEqualTo: userId2)
+              .get();
+      final following2Ids =
+          following2Snapshot.docs
+              .map((doc) => doc['followedId'] as String)
+              .toSet();
+
+      // Find intersection (mutual follows)
+      final mutualIds = following1Ids.intersection(following2Ids);
+      return mutualIds.length;
+    } catch (e) {
+      print("Error getting mutual friends count: $e");
       return 0;
     }
   }

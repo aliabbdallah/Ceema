@@ -4,14 +4,15 @@ import '../models/post.dart';
 import '../models/movie.dart';
 import 'notification_service.dart';
 import 'follow_service.dart';
+import 'profile_cache_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class PostService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final NotificationService _notificationService = NotificationService();
   final FollowService _followService = FollowService();
-
-  // User data cache
-  final Map<String, Map<String, dynamic>> _userCache = {};
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final ProfileCacheService _profileCache = ProfileCacheService();
 
   Future<void> createPost({
     required String userId,
@@ -483,6 +484,37 @@ class PostService {
     await _firestore.collection('posts').doc(postId).delete();
   }
 
+  // Update a post's content, movie, and rating
+  Future<void> updatePostDetails(
+    String postId,
+    String newContent,
+    Movie? movie,
+    double rating,
+  ) async {
+    final updateData = <String, dynamic>{};
+    updateData['content'] = newContent;
+    updateData['rating'] = rating;
+    updateData['editedAt'] = FieldValue.serverTimestamp();
+
+    if (movie != null) {
+      updateData['movieId'] = movie.id;
+      updateData['movieTitle'] = movie.title;
+      updateData['moviePosterUrl'] = movie.posterUrl;
+      updateData['movieYear'] = movie.year;
+      updateData['movieOverview'] = movie.overview;
+    } else {
+      // If movie is null, clear movie-related fields
+      updateData['movieId'] = '';
+      updateData['movieTitle'] = '';
+      updateData['moviePosterUrl'] = '';
+      updateData['movieYear'] = '';
+      updateData['movieOverview'] = '';
+      updateData['rating'] = 0.0; // Also reset rating if movie is removed
+    }
+
+    await _firestore.collection('posts').doc(postId).update(updateData);
+  }
+
   // Update a post's content
   Future<void> updatePostContent(String postId, String newContent) async {
     await _firestore.collection('posts').doc(postId).update({
@@ -534,13 +566,12 @@ class PostService {
 
   // Fetch user data with caching
   Future<Map<String, dynamic>> _getUserData(String userId) async {
-    if (_userCache.containsKey(userId)) {
-      return _userCache[userId]!;
+    try {
+      final userModel = await _profileCache.getUserProfile(userId);
+      return userModel.toJson();
+    } catch (e) {
+      print('Error getting user data: $e');
+      return {};
     }
-
-    final userDoc = await _firestore.collection('users').doc(userId).get();
-    final userData = userDoc.data() ?? {};
-    _userCache[userId] = userData;
-    return userData;
   }
 }

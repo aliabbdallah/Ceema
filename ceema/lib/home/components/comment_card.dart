@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:like_button/like_button.dart';
 import '../../services/post_service.dart';
 import '../../screens/user_profile_screen.dart';
+import '../../widgets/profile_image_widget.dart';
 
 class CommentCard extends StatefulWidget {
   final Map<String, dynamic> comment;
@@ -292,37 +293,41 @@ class _CommentCardState extends State<CommentCard> {
     final bool hasReplies = (widget.comment['replyCount'] ?? 0) > 0;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GestureDetector(
-            onTap: () {
-              if (widget.comment['userId'] != _auth.currentUser?.uid) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder:
-                        (context) => UserProfileScreen(
-                          userId: widget.comment['userId'],
-                          username: widget.comment['userName'],
-                        ),
-                  ),
-                );
-              }
-            },
-            child: CircleAvatar(
-              radius: 16,
-              backgroundImage: NetworkImage(widget.comment['userAvatar']),
+          Padding(
+            padding: const EdgeInsets.only(top: 12.0),
+            child: GestureDetector(
+              onTap: () {
+                // Navigate to user profile if not the current user
+                if (widget.comment['userId'] != _auth.currentUser?.uid) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (context) => UserProfileScreen(
+                            userId: widget.comment['userId'],
+                            username: widget.comment['userName'],
+                          ),
+                    ),
+                  );
+                }
+              },
+              child: ProfileImageWidget(
+                imageUrl: widget.comment['userAvatar'],
+                radius: 24,
+                fallbackName: widget.comment['userName'] ?? '',
+              ),
             ),
           ),
-          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 1),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surfaceVariant,
                     borderRadius: BorderRadius.circular(16),
@@ -343,13 +348,12 @@ class _CommentCardState extends State<CommentCard> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
                       Text(widget.comment['content']),
                     ],
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(left: 8.0, top: 4.0),
+                  padding: const EdgeInsets.only(left: 15.0),
                   child: Row(
                     children: [
                       Text(
@@ -363,7 +367,7 @@ class _CommentCardState extends State<CommentCard> {
                       ),
                       const SizedBox(width: 16),
                       LikeButton(
-                        size: 20,
+                        size: 30,
                         isLiked: _likes.contains(_auth.currentUser?.uid),
                         likeCount: _likes.length,
                         onTap: (isLiked) async {
@@ -387,7 +391,7 @@ class _CommentCardState extends State<CommentCard> {
                         countBuilder: (int? count, bool isLiked, String text) {
                           if (count == 0) return const SizedBox.shrink();
                           return Padding(
-                            padding: const EdgeInsets.only(left: 4.0),
+                            padding: const EdgeInsets.only(left: 1.0),
                             child: Text(
                               text,
                               style: TextStyle(
@@ -419,7 +423,6 @@ class _CommentCardState extends State<CommentCard> {
                         mainAxisAlignment: MainAxisAlignment.start,
                       ),
                       if (widget.showReplyButton) ...[
-                        const SizedBox(width: 16),
                         TextButton.icon(
                           onPressed: _showReplies,
                           icon: Icon(
@@ -572,7 +575,10 @@ class _ReplyInputState extends State<ReplyInput> {
         parentCommentId: widget.parentCommentId,
         userId: user.uid,
         userName: userData['username'] ?? user.displayName ?? 'Anonymous',
-        userAvatar: userData['profileImageUrl'] ?? user.photoURL ?? '',
+        userAvatar:
+            userData['profileImageUrl'] ??
+            user.photoURL ??
+            'https://via.placeholder.com/150',
         content: _controller.text.trim(),
       );
 

@@ -7,11 +7,13 @@ import 'package:image/image.dart' as img;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user.dart';
+import 'profile_cache_service.dart';
 
 class ProfileService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ImagePicker _picker = ImagePicker();
+  final ProfileCacheService _profileCache = ProfileCacheService();
 
   // Method to pick and process image
   Future<String?> pickAndProcessImage() async {
@@ -86,50 +88,36 @@ class ProfileService {
 
     // Update Firestore if we have any changes
     if (updates.isNotEmpty) {
+      // Update user document
       await _firestore.collection('users').doc(user.uid).update(updates);
+
+      // Update all posts by this user with the new profile information
+      final postsSnapshot =
+          await _firestore
+              .collection('posts')
+              .where('userId', isEqualTo: user.uid)
+              .get();
+
+      final batch = _firestore.batch();
+      for (var doc in postsSnapshot.docs) {
+        batch.update(doc.reference, {
+          'userName': updates['username'] ?? doc.data()['userName'],
+          'userAvatar': updates['profileImageUrl'] ?? doc.data()['userAvatar'],
+        });
+      }
+      await batch.commit();
+
+      // Force refresh the Firebase Auth user data
+      await user.reload();
+
+      // Clear the profile cache for this user
+      _profileCache.clearUserCache(user.uid);
     }
   }
 
   // Get user profile with friend stats
   Stream<UserModel> getUserProfileStream(String userId) {
-    return _firestore.collection('users').doc(userId).snapshots().asyncMap((
-      doc,
-    ) async {
-      if (!doc.exists) {
-        throw Exception('User not found');
-      }
-
-      // Get friend stats
-      final followersCount =
-          await _firestore
-              .collection('follows')
-              .where('followedId', isEqualTo: userId)
-              .count()
-              .get();
-
-      final followingCount =
-          await _firestore
-              .collection('follows')
-              .where('followerId', isEqualTo: userId)
-              .count()
-              .get();
-
-      final mutualCount =
-          await _firestore
-              .collection('follows')
-              .where('followerId', isEqualTo: userId)
-              .where('isMutual', isEqualTo: true)
-              .count()
-              .get();
-
-      // Create updated user data with friend stats
-      final userData = doc.data()!;
-      userData['followersCount'] = followersCount.count;
-      userData['followingCount'] = followingCount.count;
-      userData['mutualFriendsCount'] = mutualCount.count;
-
-      return UserModel.fromJson(userData, doc.id);
-    });
+    return _profileCache.getUserProfileStream(userId);
   }
 
   // Update user stats after friend actions

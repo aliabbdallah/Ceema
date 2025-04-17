@@ -4,17 +4,20 @@ import '../models/message.dart';
 import '../services/dm_service.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ConversationScreen extends StatefulWidget {
   final String conversationId;
   final String otherUserId;
   final String otherUsername;
+  final String? otherUserAvatar;
 
   const ConversationScreen({
     Key? key,
     required this.conversationId,
     required this.otherUserId,
     required this.otherUsername,
+    this.otherUserAvatar,
   }) : super(key: key);
 
   @override
@@ -92,186 +95,55 @@ class _ConversationScreenState extends State<ConversationScreen> {
   }
 
   String _formatMessageTime(DateTime time) {
+    return DateFormat('h:mm a').format(time);
+  }
+
+  String _formatDayHeader(DateTime time) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final messageDate = DateTime(time.year, time.month, time.day);
 
     if (messageDate == today) {
-      return DateFormat('h:mm a').format(time);
+      return 'Today';
     } else if (messageDate == today.subtract(const Duration(days: 1))) {
       return 'Yesterday';
     } else if (now.difference(time).inDays < 7) {
       return DateFormat('EEEE').format(time);
     } else {
-      return DateFormat('MMM d').format(time);
+      return DateFormat('MMMM d, y').format(time);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.otherUsername,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            StreamBuilder<bool>(
-              stream: _dmService.getUserOnlineStatus(widget.otherUserId),
-              builder: (context, snapshot) {
-                final isOnline = snapshot.data ?? false;
-                return Text(
-                  isOnline ? 'Online' : 'Offline',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: theme.colorScheme.onPrimary.withOpacity(0.7),
-                  ),
-                );
-              },
-            ),
-            StreamBuilder<Map<String, bool>>(
-              stream: _dmService.getTypingStatus(widget.conversationId),
-              builder: (context, snapshot) {
-                final typingStatus = snapshot.data ?? {};
-                final otherUserId = widget.otherUserId;
-                final isTyping = typingStatus[otherUserId] ?? false;
-
-                if (isTyping) {
-                  return Text(
-                    'typing...',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: () {
-              // TODO: Implement conversation options
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: StreamBuilder<List<Message>>(
-              stream: _dmService.getMessages(widget.conversationId),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(child: Text('Error: ${snapshot.error}'));
-                }
-
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final messages = snapshot.data!;
-                if (messages.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'No messages yet',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  controller: _scrollController,
-                  reverse: true,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 16,
-                  ),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    final isMe = message.senderId == _auth.currentUser?.uid;
-
-                    // Show date header if it's the first message or if the date changes
-                    final showDateHeader =
-                        index == messages.length - 1 ||
-                        !_isSameDay(
-                          messages[index].timestamp,
-                          messages[index + 1].timestamp,
-                        );
-
-                    return Column(
-                      children: [
-                        if (showDateHeader) _buildDateHeader(message.timestamp),
-                        _buildMessageBubble(message, isMe),
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          _buildMessageInput(),
-        ],
-      ),
-    );
-  }
-
-  bool _isSameDay(DateTime date1, DateTime date2) {
-    return date1.year == date2.year &&
-        date1.month == date2.month &&
-        date1.day == date2.day;
-  }
-
-  Widget _buildDateHeader(DateTime timestamp) {
+  Widget _buildDayHeader(DateTime timestamp) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceVariant,
-            borderRadius: BorderRadius.circular(12),
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceVariant.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Text(
-            DateFormat('MMMM d, y').format(timestamp),
+            _formatDayHeader(timestamp),
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ),
       ),
     );
-  }
-
-  Future<bool> _shouldShowTimestamp(Message message) async {
-    // Get the current message list
-    final messages = await _dmService.getMessages(widget.conversationId).first;
-
-    // Find the current message index
-    final messageIndex = messages.indexWhere((m) => m.id == message.id);
-    if (messageIndex == -1) return true;
-
-    // Get the next message
-    final nextMessage =
-        messageIndex < messages.length - 1 ? messages[messageIndex + 1] : null;
-    if (nextMessage == null) return true;
-
-    // Check if messages are from the same sender
-    if (message.senderId != nextMessage.senderId) return true;
-
-    // Check time difference
-    final timeDiff =
-        message.timestamp.difference(nextMessage.timestamp).inMinutes.abs();
-    return timeDiff >= 4;
   }
 
   Widget _buildMessageBubble(Message message, bool isMe) {
@@ -284,102 +156,105 @@ class _ConversationScreenState extends State<ConversationScreen> {
           right: isMe ? 8 : 64,
           bottom: 4,
         ),
-        child: Column(
-          crossAxisAlignment:
-              isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            GestureDetector(
-              onLongPress:
+        child: GestureDetector(
+          onLongPress:
+              isMe
+                  ? () {
+                    showModalBottomSheet(
+                      context: context,
+                      builder:
+                          (context) => Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ListTile(
+                                  leading: const Icon(Icons.edit),
+                                  title: const Text('Edit Message'),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    _showEditDialog(message);
+                                  },
+                                ),
+                                ListTile(
+                                  leading: const Icon(Icons.delete),
+                                  title: const Text('Delete Message'),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    _showDeleteConfirmation(message);
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                    );
+                  }
+                  : null,
+          child: Container(
+            decoration: BoxDecoration(
+              color:
                   isMe
-                      ? () {
-                        showModalBottomSheet(
-                          context: context,
-                          builder:
-                              (context) => Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8,
-                                ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ListTile(
-                                      leading: const Icon(Icons.edit),
-                                      title: const Text('Edit Message'),
-                                      onTap: () {
-                                        Navigator.pop(context);
-                                        _showEditDialog(message);
-                                      },
-                                    ),
-                                    ListTile(
-                                      leading: const Icon(Icons.delete),
-                                      title: const Text('Delete Message'),
-                                      onTap: () {
-                                        Navigator.pop(context);
-                                        _showDeleteConfirmation(message);
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                        );
-                      }
-                      : null,
-              child: Container(
-                decoration: BoxDecoration(
-                  color:
-                      isMe
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.secondaryContainer,
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(20),
-                    topRight: const Radius.circular(20),
-                    bottomLeft: Radius.circular(isMe ? 20 : 4),
-                    bottomRight: Radius.circular(isMe ? 4 : 20),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
-                child: Text(
-                  message.content,
-                  style: TextStyle(
-                    color:
-                        isMe
-                            ? theme.colorScheme.onPrimary
-                            : theme.colorScheme.onSecondaryContainer,
-                  ),
-                ),
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(16),
+                topRight: const Radius.circular(16),
+                bottomLeft: Radius.circular(isMe ? 16 : 4),
+                bottomRight: Radius.circular(isMe ? 4 : 16),
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            FutureBuilder<bool>(
-              future: _shouldShowTimestamp(message),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const SizedBox.shrink();
-                if (!snapshot.data!) return const SizedBox.shrink();
-
-                return Padding(
-                  padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Flexible(
                   child: Text(
-                    _formatMessageTime(message.timestamp),
+                    message.content,
                     style: TextStyle(
-                      fontSize: 11,
-                      color: theme.colorScheme.onSurfaceVariant.withOpacity(
-                        0.7,
+                      color:
+                          isMe
+                              ? theme.colorScheme.onPrimary
+                              : theme.colorScheme.onSecondaryContainer,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      _formatMessageTime(message.timestamp),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: (isMe
+                                ? theme.colorScheme.onPrimary
+                                : theme.colorScheme.onSecondaryContainer)
+                            .withOpacity(0.7),
                       ),
                     ),
-                  ),
-                );
-              },
+                    if (isMe) ...[
+                      const SizedBox(width: 2),
+                      Icon(
+                        Icons.done_all,
+                        size: 14,
+                        color: theme.colorScheme.onPrimary.withOpacity(0.7),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -451,13 +326,13 @@ class _ConversationScreenState extends State<ConversationScreen> {
   Widget _buildMessageInput() {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
             offset: const Offset(0, -2),
           ),
         ],
@@ -468,12 +343,19 @@ class _ConversationScreenState extends State<ConversationScreen> {
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                  color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(
-                    color: theme.colorScheme.outline.withOpacity(0.1),
+                    color: theme.colorScheme.outline.withOpacity(0.2),
                     width: 1,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(24),
@@ -495,7 +377,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
-                        vertical: 10,
+                        vertical: 12,
                       ),
                       border: InputBorder.none,
                       enabledBorder: InputBorder.none,
@@ -506,30 +388,30 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             Container(
               decoration: BoxDecoration(
                 color:
                     _isComposing
                         ? theme.colorScheme.primary
-                        : theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                        : theme.colorScheme.surfaceVariant.withOpacity(0.3),
                 shape: BoxShape.circle,
-                border:
-                    _isComposing
-                        ? null
-                        : Border.all(
-                          color: theme.colorScheme.outline.withOpacity(0.1),
-                          width: 1,
-                        ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: IconButton(
                 icon: Icon(
-                  Icons.send,
+                  Icons.send_rounded,
                   color:
                       _isComposing
                           ? theme.colorScheme.onPrimary
                           : theme.colorScheme.onSurfaceVariant,
-                  size: 20,
+                  size: 24,
                 ),
                 onPressed:
                     _isComposing
@@ -539,6 +421,162 @@ class _ConversationScreenState extends State<ConversationScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  bool _isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+        date1.month == date2.month &&
+        date1.day == date2.day;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          children: [
+            StreamBuilder<DocumentSnapshot>(
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(widget.otherUserId)
+                      .snapshots(),
+              builder: (context, snapshot) {
+                final profileImageUrl =
+                    snapshot.data?.get('profileImageUrl') as String?;
+                final username = snapshot.data?.get('username') as String?;
+
+                return CircleAvatar(
+                  backgroundImage:
+                      profileImageUrl != null && profileImageUrl.isNotEmpty
+                          ? NetworkImage(profileImageUrl)
+                          : null,
+                  child:
+                      profileImageUrl == null || profileImageUrl.isEmpty
+                          ? Text(
+                            (username ?? widget.otherUsername)[0].toUpperCase(),
+                          )
+                          : null,
+                );
+              },
+            ),
+            const SizedBox(width: 12),
+            StreamBuilder<DocumentSnapshot>(
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(widget.otherUserId)
+                      .snapshots(),
+              builder: (context, snapshot) {
+                final username = snapshot.data?.get('username') as String?;
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      username ?? widget.otherUsername,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    StreamBuilder<Map<String, bool>>(
+                      stream: _dmService.getTypingStatus(widget.conversationId),
+                      builder: (context, snapshot) {
+                        final typingStatus = snapshot.data ?? {};
+                        final otherUserId = widget.otherUserId;
+                        final isTyping = typingStatus[otherUserId] ?? false;
+
+                        if (isTyping) {
+                          return Text(
+                            'typing...',
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.more_vert),
+            onPressed: () {
+              // TODO: Implement conversation options
+            },
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: StreamBuilder<List<Message>>(
+              stream: _dmService.getMessages(widget.conversationId),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final messages = snapshot.data!;
+                if (messages.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No messages yet',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  controller: _scrollController,
+                  reverse: true,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 16,
+                  ),
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    final message = messages[index];
+                    final isMe = message.senderId == _auth.currentUser?.uid;
+
+                    // Show day header if it's the first message or if the day changes
+                    final showDayHeader =
+                        index == messages.length - 1 ||
+                        !_isSameDay(
+                          messages[index].timestamp,
+                          messages[index + 1].timestamp,
+                        );
+
+                    return Column(
+                      children: [
+                        if (showDayHeader) _buildDayHeader(message.timestamp),
+                        _buildMessageBubble(message, isMe),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          _buildMessageInput(),
+        ],
       ),
     );
   }

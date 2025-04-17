@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/follow_service.dart';
-import '../widgets/user_list_item.dart';
+import '../widgets/profile_image_widget.dart';
 import '../models/follow.dart';
+import '../screens/user_profile_screen.dart';
 
 class FollowingScreen extends StatelessWidget {
   final String targetUserId;
@@ -35,11 +36,42 @@ class FollowingScreen extends StatelessWidget {
             itemCount: following.length,
             itemBuilder: (context, index) {
               final followed = following[index];
-              return UserListItem(
-                userId: followed.followedId,
-                userName: followed.followedName,
-                userPhotoUrl: followed.followedAvatar,
-                isPrivate: false,
+              return ListTile(
+                leading: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (context) => UserProfileScreen(
+                              userId: followed.followedId,
+                              username: followed.followedName,
+                            ),
+                      ),
+                    );
+                  },
+                  child: ProfileImageWidget(
+                    imageUrl: followed.followedAvatar,
+                    radius: 24,
+                    fallbackName: followed.followedName,
+                  ),
+                ),
+                title: Text(
+                  followed.followedName,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (context) => UserProfileScreen(
+                            userId: followed.followedId,
+                            username: followed.followedName,
+                          ),
+                    ),
+                  );
+                },
               );
             },
           );

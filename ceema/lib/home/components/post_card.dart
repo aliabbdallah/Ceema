@@ -10,6 +10,7 @@ import '../../screens/user_profile_screen.dart';
 import '../../screens/movie_details_screen.dart';
 import '../../screens/comments_screen.dart';
 import '../../screens/post_screen.dart';
+import '../../screens/edit_post_screen.dart';
 import '../../widgets/profile_image_widget.dart';
 
 class SeamlessPostCard extends StatefulWidget {
@@ -124,63 +125,11 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
                   title: const Text('Edit Post'),
                   onTap: () {
                     Navigator.pop(context);
-                    final controller = TextEditingController(
-                      text: widget.post.content,
-                    );
-                    showDialog(
-                      context: context,
-                      builder:
-                          (context) => AlertDialog(
-                            title: const Text('Edit Post'),
-                            content: TextField(
-                              controller: controller,
-                              maxLines: 3,
-                              decoration: const InputDecoration(
-                                hintText: 'Edit your post...',
-                              ),
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('Cancel'),
-                              ),
-                              TextButton(
-                                onPressed: () async {
-                                  try {
-                                    await _postService.updatePostContent(
-                                      widget.post.id,
-                                      controller.text,
-                                    );
-                                    if (mounted) {
-                                      Navigator.pop(context);
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Post updated successfully',
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  } catch (e) {
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            'Error updating post: $e',
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  }
-                                },
-                                child: const Text('Save'),
-                              ),
-                            ],
-                          ),
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => EditPostScreen(post: widget.post),
+                      ),
                     );
                   },
                 ),
@@ -283,7 +232,7 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
                       },
                       child: ProfileImageWidget(
                         imageUrl: widget.post.userAvatar,
-                        radius: 20,
+                        radius: 26,
                         fallbackName: widget.post.userName,
                       ),
                     ),

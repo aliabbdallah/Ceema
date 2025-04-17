@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/conversation.dart';
 import '../services/dm_service.dart';
 import 'conversation_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class DMScreen extends StatelessWidget {
   const DMScreen({Key? key}) : super(key: key);
@@ -95,27 +96,47 @@ class DMScreen extends StatelessWidget {
   ) {
     final otherUserName =
         conversation.participantNames[otherUserId] ?? 'Unknown User';
-    final otherUserAvatar = conversation.participantAvatars[otherUserId] ?? '';
 
     return ListTile(
-      leading: CircleAvatar(
-        backgroundImage:
-            otherUserAvatar.isNotEmpty
-                ? otherUserAvatar.startsWith('assets/')
-                    ? AssetImage(otherUserAvatar) as ImageProvider
-                    : NetworkImage(otherUserAvatar) as ImageProvider
-                : null,
-        child:
-            otherUserAvatar.isEmpty
-                ? Text(otherUserName[0].toUpperCase())
-                : null,
+      leading: StreamBuilder<DocumentSnapshot>(
+        stream:
+            FirebaseFirestore.instance
+                .collection('users')
+                .doc(otherUserId)
+                .snapshots(),
+        builder: (context, snapshot) {
+          final profileImageUrl =
+              snapshot.data?.get('profileImageUrl') as String?;
+          final username = snapshot.data?.get('username') as String?;
+
+          return CircleAvatar(
+            backgroundImage:
+                profileImageUrl != null && profileImageUrl.isNotEmpty
+                    ? NetworkImage(profileImageUrl)
+                    : null,
+            child:
+                profileImageUrl == null || profileImageUrl.isEmpty
+                    ? Text((username ?? otherUserName)[0].toUpperCase())
+                    : null,
+          );
+        },
       ),
       title: Row(
         children: [
           Expanded(
-            child: Text(
-              otherUserName,
-              style: const TextStyle(fontWeight: FontWeight.normal),
+            child: StreamBuilder<DocumentSnapshot>(
+              stream:
+                  FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(otherUserId)
+                      .snapshots(),
+              builder: (context, snapshot) {
+                final username = snapshot.data?.get('username') as String?;
+                return Text(
+                  username ?? otherUserName,
+                  style: const TextStyle(fontWeight: FontWeight.normal),
+                );
+              },
             ),
           ),
           Text(

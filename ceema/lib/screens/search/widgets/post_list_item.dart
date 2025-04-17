@@ -5,13 +5,15 @@ import '../../../models/post.dart';
 import '../../../models/user.dart';
 import '../../../widgets/profile_image_widget.dart';
 import '../../../screens/post_screen.dart';
+import '../../../services/profile_cache_service.dart';
 
 class PostListItem extends StatelessWidget {
   final Post post;
   final FirebaseAuth auth;
   final FirebaseFirestore firestore;
+  final ProfileCacheService _profileCache = ProfileCacheService();
 
-  const PostListItem({
+  PostListItem({
     Key? key,
     required this.post,
     required this.auth,
@@ -20,14 +22,11 @@ class PostListItem extends StatelessWidget {
 
   Future<UserModel?> _getUserData(String userId) async {
     try {
-      final doc = await firestore.collection('users').doc(userId).get();
-      if (doc.exists) {
-        return UserModel.fromJson(doc.data()!, doc.id);
-      }
+      return await _profileCache.getUserProfile(userId);
     } catch (e) {
       print('Error getting user data: $e');
+      return null;
     }
-    return null;
   }
 
   @override

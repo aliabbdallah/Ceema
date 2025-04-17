@@ -45,4 +45,26 @@ class Follow {
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
+
+  Follow copyWith({
+    String? id,
+    String? followerId,
+    String? followerName,
+    String? followerAvatar,
+    String? followedId,
+    String? followedName,
+    String? followedAvatar,
+    DateTime? createdAt,
+  }) {
+    return Follow(
+      id: id ?? this.id,
+      followerId: followerId ?? this.followerId,
+      followerName: followerName ?? this.followerName,
+      followerAvatar: followerAvatar ?? this.followerAvatar,
+      followedId: followedId ?? this.followedId,
+      followedName: followedName ?? this.followedName,
+      followedAvatar: followedAvatar ?? this.followedAvatar,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
 }

@@ -12,12 +12,13 @@ class WatchlistService {
     String? notes,
   }) async {
     // Check if the movie is already in the watchlist
-    final existingItem = await _firestore
-        .collection('watchlist_items')
-        .where('userId', isEqualTo: userId)
-        .where('movie.id', isEqualTo: movie.id)
-        .limit(1)
-        .get();
+    final existingItem =
+        await _firestore
+            .collection('watchlist_items')
+            .where('userId', isEqualTo: userId)
+            .where('movie.id', isEqualTo: movie.id)
+            .limit(1)
+            .get();
 
     if (existingItem.docs.isNotEmpty) {
       // Movie already in watchlist, update notes if provided
@@ -66,31 +67,33 @@ class WatchlistService {
         .orderBy('addedAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => WatchlistItem.fromJson(doc.data(), doc.id))
-          .toList();
-    });
+          return snapshot.docs
+              .map((doc) => WatchlistItem.fromJson(doc.data(), doc.id))
+              .toList();
+        });
   }
 
   // Check if a movie is in the user's watchlist
   Future<bool> isInWatchlist(String userId, String movieId) async {
-    final query = await _firestore
-        .collection('watchlist_items')
-        .where('userId', isEqualTo: userId)
-        .where('movie.id', isEqualTo: movieId)
-        .limit(1)
-        .get();
+    final query =
+        await _firestore
+            .collection('watchlist_items')
+            .where('userId', isEqualTo: userId)
+            .where('movie.id', isEqualTo: movieId)
+            .limit(1)
+            .get();
 
     return query.docs.isNotEmpty;
   }
 
   // Get watchlist count for a user
   Future<int> getWatchlistCount(String userId) async {
-    final query = await _firestore
-        .collection('watchlist_items')
-        .where('userId', isEqualTo: userId)
-        .count()
-        .get();
+    final query =
+        await _firestore
+            .collection('watchlist_items')
+            .where('userId', isEqualTo: userId)
+            .count()
+            .get();
 
     return query.count ?? 0;
   }
@@ -138,8 +141,55 @@ class WatchlistService {
         await query.orderBy(orderField, descending: descending).get();
 
     return snapshot.docs
-        .map((doc) =>
-            WatchlistItem.fromJson(doc.data() as Map<String, dynamic>, doc.id))
+        .map(
+          (doc) => WatchlistItem.fromJson(
+            doc.data() as Map<String, dynamic>,
+            doc.id,
+          ),
+        )
         .toList();
+  }
+
+  // Get filtered watchlist items as a stream
+  Stream<List<WatchlistItem>> getFilteredWatchlistStream({
+    required String userId,
+    String? genre,
+    String? year,
+    String? sortBy,
+    bool descending = true,
+  }) {
+    Query query = _firestore
+        .collection('watchlist_items')
+        .where('userId', isEqualTo: userId);
+
+    // Apply filters
+    if (genre != null) {
+      query = query.where('movie.genres', arrayContains: genre);
+    }
+
+    if (year != null) {
+      query = query.where('movie.year', isEqualTo: year);
+    }
+
+    // Apply sorting
+    String orderField = 'addedAt';
+    if (sortBy == 'title') {
+      orderField = 'movie.title';
+    } else if (sortBy == 'year') {
+      orderField = 'movie.year';
+    }
+
+    return query.orderBy(orderField, descending: descending).snapshots().map((
+      snapshot,
+    ) {
+      return snapshot.docs
+          .map(
+            (doc) => WatchlistItem.fromJson(
+              doc.data() as Map<String, dynamic>,
+              doc.id,
+            ),
+          )
+          .toList();
+    });
   }
 }

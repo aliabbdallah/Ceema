@@ -8,6 +8,13 @@ import '../services/diary_service.dart';
 import '../services/follow_service.dart';
 import 'dart:math';
 
+class PostRecommendationResult {
+  final List<Post> posts;
+  final DocumentSnapshot? lastDoc;
+
+  PostRecommendationResult(this.posts, this.lastDoc);
+}
+
 class PostRecommendationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -25,12 +32,16 @@ class PostRecommendationService {
   static const bool _debug = false;
 
   // Get recommended posts for the current user
-  Future<List<Post>> getRecommendedPosts({int limit = 10}) async {
+  Future<PostRecommendationResult> getRecommendedPosts({
+    int limit = 10,
+    DocumentSnapshot? startAfter,
+  }) async {
     try {
       final userId = _auth.currentUser?.uid;
       if (userId == null) {
         _log('Error: User not authenticated');
-        return _getFallbackRecommendations(limit);
+        final fallbackPosts = await _getFallbackRecommendations(limit);
+        return PostRecommendationResult(fallbackPosts, null);
       }
 
       _log('Getting recommended posts for user: $userId');
@@ -38,17 +49,20 @@ class PostRecommendationService {
       // 1. Parallel fetch of user data
       final userData = await _fetchUserDataInParallel(userId);
       if (userData.isEmpty) {
-        return _getFallbackRecommendations(limit);
+        final fallbackPosts = await _getFallbackRecommendations(limit);
+        return PostRecommendationResult(fallbackPosts, null);
       }
 
       // 2. Get candidate posts with pagination
       final candidates = await _getCandidatePosts(
         userId,
         userData['likedPostIds'],
-        limit: 50, // Increased for diversity
+        limit: limit,
+        startAfter: startAfter,
       );
       if (candidates.isEmpty) {
-        return _getFallbackRecommendations(limit);
+        final fallbackPosts = await _getFallbackRecommendations(limit);
+        return PostRecommendationResult(fallbackPosts, null);
       }
 
       // 3. Score posts with collaborative filtering for new users
@@ -61,10 +75,15 @@ class PostRecommendationService {
       );
 
       // 4. Apply diversity and return top posts
-      return _applyDiversityAndReturnTopPosts(scoredPosts, limit);
+      final posts = _applyDiversityAndReturnTopPosts(scoredPosts, limit);
+      return PostRecommendationResult(
+        posts,
+        null,
+      ); // TODO: Return actual lastDoc
     } catch (e) {
       _log('Error getting recommended posts: $e');
-      return _getFallbackRecommendations(limit);
+      final fallbackPosts = await _getFallbackRecommendations(limit);
+      return PostRecommendationResult(fallbackPosts, null);
     }
   }
 
@@ -106,9 +125,9 @@ class PostRecommendationService {
   Future<List<Post>> _getFallbackRecommendations(int limit) async {
     try {
       // Try trending posts first
-      final trendingPosts = await getTrendingPosts(limit: limit);
-      if (trendingPosts.isNotEmpty) {
-        return trendingPosts;
+      final trendingResult = await getTrendingPosts(limit: limit);
+      if (trendingResult.posts.isNotEmpty) {
+        return trendingResult.posts;
       }
 
       // If no trending posts, get recent posts
@@ -120,7 +139,9 @@ class PostRecommendationService {
               .get();
 
       return querySnapshot.docs
-          .map((doc) => Post.fromJson(doc.data(), doc.id))
+          .map(
+            (doc) => Post.fromJson(doc.data() as Map<String, dynamic>, doc.id),
+          )
           .toList();
     } catch (e) {
       _log('Error getting fallback recommendations: $e');
@@ -133,19 +154,26 @@ class PostRecommendationService {
     String userId,
     List<String> likedPostIds, {
     int limit = 30,
+    DocumentSnapshot? startAfter,
   }) async {
     try {
-      final querySnapshot =
-          await _firestore
-              .collection('posts')
-              .where('userId', isNotEqualTo: userId)
-              .orderBy('userId')
-              .orderBy('createdAt', descending: true)
-              .limit(limit)
-              .get();
+      Query query = _firestore
+          .collection('posts')
+          .where('userId', isNotEqualTo: userId)
+          .orderBy('userId')
+          .orderBy('createdAt', descending: true)
+          .limit(limit);
+
+      if (startAfter != null) {
+        query = query.startAfterDocument(startAfter);
+      }
+
+      final querySnapshot = await query.get();
 
       return querySnapshot.docs
-          .map((doc) => Post.fromJson(doc.data(), doc.id))
+          .map(
+            (doc) => Post.fromJson(doc.data() as Map<String, dynamic>, doc.id),
+          )
           .where((post) => !likedPostIds.contains(post.id))
           .toList();
     } catch (e) {
@@ -290,28 +318,34 @@ class PostRecommendationService {
   }
 
   // Get trending posts (based on engagement metrics)
-  Future<List<Post>> getTrendingPosts({int limit = 10}) async {
+  Future<PostRecommendationResult> getTrendingPosts({
+    int limit = 10,
+    DocumentSnapshot? startAfter,
+  }) async {
     try {
       print('[PostRecommendationService] Getting trending posts');
       // Get recent posts (from last 14 days)
       final twoWeeksAgo = DateTime.now().subtract(const Duration(days: 14));
-      final querySnapshot =
-          await _firestore
-              .collection('posts')
-              .where(
-                'createdAt',
-                isGreaterThan: Timestamp.fromDate(twoWeeksAgo),
-              )
-              .orderBy('createdAt', descending: true)
-              .limit(50) // Get a larger pool first for sorting
-              .get();
+      Query query = _firestore
+          .collection('posts')
+          .where('createdAt', isGreaterThan: Timestamp.fromDate(twoWeeksAgo))
+          .orderBy('createdAt', descending: true)
+          .limit(limit);
 
+      if (startAfter != null) {
+        query = query.startAfterDocument(startAfter);
+      }
+
+      final querySnapshot = await query.get();
       print(
         '[PostRecommendationService] Found ${querySnapshot.docs.length} recent posts',
       );
       final posts =
           querySnapshot.docs
-              .map((doc) => Post.fromJson(doc.data(), doc.id))
+              .map(
+                (doc) =>
+                    Post.fromJson(doc.data() as Map<String, dynamic>, doc.id),
+              )
               .toList();
 
       // Calculate a trend score for each post based on recency and engagement
@@ -341,15 +375,21 @@ class PostRecommendationService {
       print(
         '[PostRecommendationService] Returning ${result.length} trending posts',
       );
-      return result;
+      return PostRecommendationResult(
+        result,
+        querySnapshot.docs.isNotEmpty ? querySnapshot.docs.last : null,
+      );
     } catch (e) {
       print('[PostRecommendationService] Error getting trending posts: $e');
-      return [];
+      return PostRecommendationResult([], null);
     }
   }
 
   // Get posts from friends (people the user follows)
-  Future<List<Post>> getFriendsPosts({int limit = 10}) async {
+  Future<PostRecommendationResult> getFriendsPosts({
+    int limit = 10,
+    DocumentSnapshot? startAfter,
+  }) async {
     try {
       final userId = _auth.currentUser?.uid;
       if (userId == null) {
@@ -370,30 +410,43 @@ class PostRecommendationService {
         print(
           '[PostRecommendationService] User does not follow anyone, returning empty list',
         );
-        return [];
+        return PostRecommendationResult([], null);
       }
 
       // Get recent posts from followed users
-      final querySnapshot =
-          await _firestore
-              .collection('posts')
-              .where(
-                'userId',
-                whereIn: following.take(10).toList(),
-              ) // Firestore limitation: maximum 10 values in whereIn
-              .orderBy('createdAt', descending: true)
-              .limit(limit)
-              .get();
+      Query query = _firestore
+          .collection('posts')
+          .where(
+            'userId',
+            whereIn: following.take(10).toList(),
+          ) // Firestore limitation: maximum 10 values in whereIn
+          .orderBy('createdAt', descending: true)
+          .limit(limit);
+
+      if (startAfter != null) {
+        query = query.startAfterDocument(startAfter);
+      }
+
+      final querySnapshot = await query.get();
 
       print(
         '[PostRecommendationService] Found ${querySnapshot.docs.length} posts from friends',
       );
-      return querySnapshot.docs
-          .map((doc) => Post.fromJson(doc.data(), doc.id))
-          .toList();
+      final posts =
+          querySnapshot.docs
+              .map(
+                (doc) =>
+                    Post.fromJson(doc.data() as Map<String, dynamic>, doc.id),
+              )
+              .toList();
+
+      return PostRecommendationResult(
+        posts,
+        querySnapshot.docs.isNotEmpty ? querySnapshot.docs.last : null,
+      );
     } catch (e) {
       print('[PostRecommendationService] Error getting friends posts: $e');
-      return [];
+      return PostRecommendationResult([], null);
     }
   }
 
@@ -427,7 +480,9 @@ class PostRecommendationService {
         '[PostRecommendationService] Found ${querySnapshot.docs.length} similar posts',
       );
       return querySnapshot.docs
-          .map((doc) => Post.fromJson(doc.data(), doc.id))
+          .map(
+            (doc) => Post.fromJson(doc.data() as Map<String, dynamic>, doc.id),
+          )
           .toList();
     } catch (e) {
       print(

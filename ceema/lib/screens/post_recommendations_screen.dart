@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/post_service.dart';
 import '../services/post_recommendation_service.dart';
 import '../models/post.dart';
 import '../widgets/loading_indicator.dart';
 import '../home/components/post_card.dart';
+import 'dart:async';
 
 class PostRecommendationsScreen extends StatefulWidget {
   const PostRecommendationsScreen({Key? key}) : super(key: key);
@@ -20,115 +22,125 @@ class _PostRecommendationsScreenState extends State<PostRecommendationsScreen>
       PostRecommendationService();
   late TabController _tabController;
 
-  List<Post>? _personalizedPosts;
-  List<Post>? _trendingPosts;
-  List<Post>? _friendPosts;
+  // Cache for posts
+  final Map<String, List<Post>> _postsCache = {};
+  final Map<String, bool> _isLoadingCache = {};
+  final Map<String, String?> _errorCache = {};
+  final Map<String, DocumentSnapshot?> _lastDocCache = {};
+  static const int _pageSize = 10;
 
-  bool _isLoadingPersonalized = true;
-  bool _isLoadingTrending = true;
-  bool _isLoadingFriends = true;
-
-  String? _personalizedError;
-  String? _trendingError;
-  String? _friendsError;
+  // Debounce timer for tab changes
+  Timer? _debounceTimer;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _loadRecommendations();
+    _loadInitialRecommendations();
   }
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _tabController.dispose();
     super.dispose();
   }
 
-  void _loadRecommendations() {
-    // Load personalized recommendations
-    setState(() {
-      _isLoadingPersonalized = true;
-      _personalizedError = null;
-    });
-
-    _recommendationService
-        .getRecommendedPosts()
-        .then((posts) {
-          if (mounted) {
-            setState(() {
-              _personalizedPosts = posts;
-              _isLoadingPersonalized = false;
-            });
-          }
-        })
-        .catchError((error) {
-          if (mounted) {
-            setState(() {
-              _personalizedError = error.toString();
-              _isLoadingPersonalized = false;
-            });
-          }
-        });
-
-    // Load trending posts
-    setState(() {
-      _isLoadingTrending = true;
-      _trendingError = null;
-    });
-
-    _recommendationService
-        .getTrendingPosts()
-        .then((posts) {
-          if (mounted) {
-            setState(() {
-              _trendingPosts = posts;
-              _isLoadingTrending = false;
-            });
-          }
-        })
-        .catchError((error) {
-          if (mounted) {
-            setState(() {
-              _trendingError = error.toString();
-              _isLoadingTrending = false;
-            });
-          }
-        });
-
-    // Load friend posts
-    setState(() {
-      _isLoadingFriends = true;
-      _friendsError = null;
-    });
-
-    _recommendationService
-        .getFriendsPosts()
-        .then((posts) {
-          if (mounted) {
-            setState(() {
-              _friendPosts = posts;
-              _isLoadingFriends = false;
-            });
-          }
-        })
-        .catchError((error) {
-          if (mounted) {
-            setState(() {
-              _friendsError = error.toString();
-              _isLoadingFriends = false;
-            });
-          }
-        });
+  Future<void> _loadInitialRecommendations() async {
+    if (!mounted) return;
+    await _loadRecommendations('personalized');
   }
 
-  Widget _buildPostList(
-    List<Post>? posts,
-    bool isLoading,
-    String? error,
-    String emptyMessage,
-  ) {
-    if (isLoading) {
+  Future<void> _loadRecommendations(String type) async {
+    if (_isLoadingCache[type] == true) return;
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingCache[type] = true;
+      _errorCache[type] = null;
+    });
+
+    try {
+      List<Post> posts;
+      DocumentSnapshot? lastDoc;
+
+      switch (type) {
+        case 'personalized':
+          final result = await _recommendationService.getRecommendedPosts(
+            limit: _pageSize,
+            startAfter: _lastDocCache[type],
+          );
+          posts = result.posts;
+          lastDoc = result.lastDoc;
+          break;
+        case 'trending':
+          final result = await _recommendationService.getTrendingPosts(
+            limit: _pageSize,
+            startAfter: _lastDocCache[type],
+          );
+          posts = result.posts;
+          lastDoc = result.lastDoc;
+          break;
+        case 'friends':
+          final result = await _recommendationService.getFriendsPosts(
+            limit: _pageSize,
+            startAfter: _lastDocCache[type],
+          );
+          posts = result.posts;
+          lastDoc = result.lastDoc;
+          break;
+        default:
+          posts = [];
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _postsCache[type] = [...?_postsCache[type], ...posts];
+        _isLoadingCache[type] = false;
+        if (lastDoc != null) {
+          _lastDocCache[type] = lastDoc;
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _errorCache[type] = error.toString();
+        _isLoadingCache[type] = false;
+      });
+    }
+  }
+
+  void _onTabChanged() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      final type = _getCurrentTabType();
+      if (_postsCache[type] == null || _postsCache[type]!.isEmpty) {
+        _loadRecommendations(type);
+      }
+    });
+  }
+
+  String _getCurrentTabType() {
+    switch (_tabController.index) {
+      case 0:
+        return 'personalized';
+      case 1:
+        return 'trending';
+      case 2:
+        return 'friends';
+      default:
+        return 'personalized';
+    }
+  }
+
+  Widget _buildPostList(String type) {
+    final posts = _postsCache[type] ?? [];
+    final isLoading = _isLoadingCache[type] ?? false;
+    final error = _errorCache[type];
+
+    if (isLoading && posts.isEmpty) {
       return const Center(child: LoadingIndicator());
     }
 
@@ -142,7 +154,11 @@ class _PostRecommendationsScreenState extends State<PostRecommendationsScreen>
             Text('Error: $error'),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _loadRecommendations,
+              onPressed: () {
+                _postsCache[type] = [];
+                _lastDocCache[type] = null;
+                _loadRecommendations(type);
+              },
               child: const Text('Retry'),
             ),
           ],
@@ -150,7 +166,7 @@ class _PostRecommendationsScreenState extends State<PostRecommendationsScreen>
       );
     }
 
-    if (posts == null || posts.isEmpty) {
+    if (posts.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -164,7 +180,7 @@ class _PostRecommendationsScreenState extends State<PostRecommendationsScreen>
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Text(
-                emptyMessage,
+                _getEmptyMessage(type),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey[600]),
               ),
@@ -176,21 +192,30 @@ class _PostRecommendationsScreenState extends State<PostRecommendationsScreen>
 
     return ListView.builder(
       padding: const EdgeInsets.only(top: 8),
-      itemCount: posts.length,
+      itemCount: posts.length + (isLoading ? 1 : 0),
       itemBuilder: (context, index) {
-        final post = posts[index];
-
-        // Log view interaction for personalized tab
-        if (_tabController.index == 0) {
-          _recommendationService.logInteraction(
-            postId: post.id,
-            actionType: 'view',
-          );
+        if (index == posts.length) {
+          _loadRecommendations(type);
+          return const Center(child: LoadingIndicator());
         }
 
+        final post = posts[index];
         return SeamlessPostCard(post: post);
       },
     );
+  }
+
+  String _getEmptyMessage(String type) {
+    switch (type) {
+      case 'personalized':
+        return 'No personalized recommendations yet. Try adding more movies to your diary or following more people!';
+      case 'trending':
+        return 'No trending posts right now. Check back later!';
+      case 'friends':
+        return 'No recent posts from friends. Try following more people!';
+      default:
+        return 'No posts available.';
+    }
   }
 
   @override
@@ -202,6 +227,7 @@ class _PostRecommendationsScreenState extends State<PostRecommendationsScreen>
         title: const Text('Discover'),
         bottom: TabBar(
           controller: _tabController,
+          onTap: (_) => _onTabChanged(),
           tabs: const [
             Tab(text: 'For You'),
             Tab(text: 'Trending'),
@@ -211,7 +237,12 @@ class _PostRecommendationsScreenState extends State<PostRecommendationsScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadRecommendations,
+            onPressed: () {
+              final type = _getCurrentTabType();
+              _postsCache[type] = [];
+              _lastDocCache[type] = null;
+              _loadRecommendations(type);
+            },
             tooltip: 'Refresh recommendations',
           ),
         ],
@@ -219,29 +250,9 @@ class _PostRecommendationsScreenState extends State<PostRecommendationsScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          // Personalized recommendations
-          _buildPostList(
-            _personalizedPosts,
-            _isLoadingPersonalized,
-            _personalizedError,
-            'No personalized recommendations yet. Try adding more movies to your diary or following more people!',
-          ),
-
-          // Trending posts
-          _buildPostList(
-            _trendingPosts,
-            _isLoadingTrending,
-            _trendingError,
-            'No trending posts right now. Check back later!',
-          ),
-
-          // Friend posts
-          _buildPostList(
-            _friendPosts,
-            _isLoadingFriends,
-            _friendsError,
-            'No recent posts from friends. Try following more people!',
-          ),
+          _buildPostList('personalized'),
+          _buildPostList('trending'),
+          _buildPostList('friends'),
         ],
       ),
     );

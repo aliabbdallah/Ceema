@@ -62,7 +62,6 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
       GlobalKey<RefreshIndicatorState>();
   bool _isLoading = false;
   final PageController _pageController = PageController();
-  bool _isFilterVisible = true;
   double _lastScrollPosition = 0;
   bool _isAtTop = true;
   bool _isScrollingDown = false;
@@ -107,17 +106,6 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
       _refreshFeed();
     }
 
-    // Update filter visibility
-    if (scrollDelta > 10 && _isFilterVisible) {
-      setState(() {
-        _isFilterVisible = false;
-      });
-    } else if (scrollDelta < -10 && !_isFilterVisible) {
-      setState(() {
-        _isFilterVisible = true;
-      });
-    }
-
     setState(() {
       _isAtTop = isAtTop;
       _isScrollingDown = scrollDelta > 0;
@@ -147,12 +135,12 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
     });
 
     try {
-      final recommendations = await _recommendationService.getRecommendedPosts(
+      final result = await _recommendationService.getRecommendedPosts(
         limit: 20,
       );
       if (mounted) {
         setState(() {
-          _cachedForYouPosts = recommendations;
+          _cachedForYouPosts = result.posts;
           _isForYouLoading = false;
         });
       }
@@ -253,13 +241,24 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
             child: Row(
               children: [
                 // User avatar
-                ProfileImageWidget(
-                  imageUrl: _auth.currentUser?.photoURL,
-                  radius: 20,
-                  fallbackName:
-                      _auth.currentUser?.displayName?.split(' ').first ??
-                      _auth.currentUser?.email?.split('@').first ??
-                      "User",
+                StreamBuilder<DocumentSnapshot>(
+                  stream:
+                      FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(_auth.currentUser?.uid)
+                          .snapshots(),
+                  builder: (context, snapshot) {
+                    final profileImageUrl =
+                        snapshot.data?.get('profileImageUrl') as String?;
+                    final username = snapshot.data?.get('username') as String?;
+                    final displayName = _auth.currentUser?.displayName;
+
+                    return ProfileImageWidget(
+                      imageUrl: profileImageUrl,
+                      radius: 30,
+                      fallbackName: username ?? displayName ?? "User",
+                    );
+                  },
                 ),
                 const SizedBox(width: 12),
                 StreamBuilder<DocumentSnapshot>(
@@ -270,11 +269,10 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
                           .snapshots(),
                   builder: (context, snapshot) {
                     final username = snapshot.data?.get('username') as String?;
+                    final displayName = _auth.currentUser?.displayName;
+
                     return Text(
-                      username ??
-                          _auth.currentUser?.displayName ??
-                          _auth.currentUser?.email?.split('@').first ??
-                          "User",
+                      username ?? displayName ?? "User",
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
