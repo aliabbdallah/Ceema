@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ceema/models/movie.dart';
 import 'package:ceema/services/post_service.dart';
 import 'package:ceema/services/tmdb_service.dart';
+import 'package:ceema/services/diary_service.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 
 class ComposePostScreen extends StatefulWidget {
@@ -19,6 +20,7 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
   final TextEditingController _contentController = TextEditingController();
   final PostService _postService = PostService();
   final TMDBService _tmdbService = TMDBService();
+  final DiaryService _diaryService = DiaryService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -28,6 +30,7 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
   List<Movie> _searchResults = [];
   Movie? _selectedMovie;
   double _rating = 0.0;
+  bool _addToDiary = false;
 
   @override
   void initState() {
@@ -116,6 +119,7 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
           await _firestore.collection('users').doc(currentUser.uid).get();
       final userData = userDoc.data() ?? {};
 
+      // Create the post
       await _postService.createPost(
         userId: currentUser.uid,
         userName:
@@ -126,9 +130,28 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
         rating: _rating,
       );
 
+      // If add to diary is enabled, add to diary as well
+      if (_addToDiary) {
+        await _diaryService.addDiaryEntry(
+          userId: currentUser.uid,
+          movie: _selectedMovie!,
+          rating: _rating,
+          review: _contentController.text.trim(),
+          watchedDate: DateTime.now(),
+          isFavorite: false,
+          isRewatch: false,
+        );
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Post created successfully!')),
+          SnackBar(
+            content: Text(
+              _addToDiary
+                  ? 'Post created and added to diary successfully!'
+                  : 'Post created successfully!',
+            ),
+          ),
         );
         Navigator.pop(context, true); // Return success
       }
@@ -136,7 +159,7 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error creating post: $e')));
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
         setState(() {
           _isLoading = false;
         });
@@ -350,7 +373,7 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
         title: const Text('Create Post'),
         actions: [
           TextButton(
-            onPressed: _isLoading ? null : _submitPost,
+            onPressed: _isLoading ? null : () => _submitPost(),
             child:
                 _isLoading
                     ? const SizedBox(
@@ -386,6 +409,30 @@ class _ComposePostScreenState extends State<ComposePostScreen> {
               const SizedBox(height: 24),
               _buildContentInput(),
               const SizedBox(height: 24),
+              Row(
+                children: [
+                  const SizedBox(width: 8),
+                  Text(
+                    'Add to Diary',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.secondary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Switch(
+                    value: _addToDiary,
+                    onChanged: (value) {
+                      setState(() {
+                        _addToDiary = value;
+                      });
+                    },
+                    activeColor: Theme.of(context).colorScheme.secondary,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               Center(
                 child: Column(
                   children: [

@@ -428,6 +428,55 @@ class TMDBService {
     }
   }
 
+  // Fetch movie details by ID
+  Future<Movie?> getMovieDetails(String movieId) async {
+    // Check cache first (implement caching if desired)
+    // if (_movieDetailCache.containsKey(movieId)) {
+    //   return _movieDetailCache[movieId];
+    // }
+
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '$_baseUrl/movie/$movieId?api_key=$_apiKey&append_to_response=credits',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        // Extract director from credits
+        String director = '';
+        if (data['credits'] != null && data['credits']['crew'] != null) {
+          final crew = data['credits']['crew'] as List;
+          final directorData = crew.firstWhere(
+            (member) => member['job'] == 'Director',
+            orElse: () => null,
+          );
+          if (directorData != null) {
+            director = directorData['name'] ?? '';
+          }
+        }
+
+        // Construct the Movie object
+        final movie = Movie.fromJson({...data, 'director': director});
+
+        // Cache the result (implement caching if desired)
+        // _movieDetailCache[movieId] = movie;
+
+        return movie;
+      } else {
+        print(
+          'Failed to load movie details for ID $movieId: ${response.statusCode}',
+        );
+        return null;
+      }
+    } catch (e) {
+      print('Error fetching movie details for ID $movieId: $e');
+      return null;
+    }
+  }
+
   // Bulk fetch directors for a list of movie IDs
   static Future<Map<String, String>> _bulkFetchDirectors(
     List<String> movieIds,

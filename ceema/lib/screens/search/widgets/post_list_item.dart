@@ -5,27 +5,60 @@ import '../../../models/post.dart';
 import '../../../models/user.dart';
 import '../../../widgets/profile_image_widget.dart';
 import '../../../screens/post_screen.dart';
-import '../../../services/profile_cache_service.dart';
+import '../../../services/profile_service.dart';
+import 'package:intl/intl.dart';
+import '../../../screens/user_profile_screen.dart';
+import '../../../screens/movie_details_screen.dart';
+import '../../../models/movie.dart';
 
-class PostListItem extends StatelessWidget {
+class PostListItem extends StatefulWidget {
   final Post post;
   final FirebaseAuth auth;
   final FirebaseFirestore firestore;
-  final ProfileCacheService _profileCache = ProfileCacheService();
 
-  PostListItem({
+  const PostListItem({
     Key? key,
     required this.post,
     required this.auth,
     required this.firestore,
   }) : super(key: key);
 
-  Future<UserModel?> _getUserData(String userId) async {
+  @override
+  _PostListItemState createState() => _PostListItemState();
+}
+
+class _PostListItemState extends State<PostListItem> {
+  final ProfileService _profileService = ProfileService();
+  UserModel? _userData;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
     try {
-      return await _profileCache.getUserProfile(userId);
+      final user = await _profileService.getUserProfile(widget.post.userId);
+      if (mounted) {
+        setState(() {
+          _userData = user;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      print('Error getting user data: $e');
-      return null;
+      print("Error loading user data for post: $e");
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -46,7 +79,9 @@ class PostListItem extends StatelessWidget {
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => PostScreen(post: post)),
+              MaterialPageRoute(
+                builder: (context) => PostScreen(post: widget.post),
+              ),
             );
           },
           child: Padding(
@@ -56,38 +91,35 @@ class PostListItem extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    FutureBuilder<UserModel?>(
-                      future: _getUserData(post.userId),
-                      builder: (context, snapshot) {
-                        return ProfileImageWidget(
+                    _isLoading
+                        ? const CircularProgressIndicator(strokeWidth: 2)
+                        : ProfileImageWidget(
                           imageUrl:
-                              post.userAvatar.isNotEmpty
-                                  ? post.userAvatar
-                                  : null,
+                              _userData?.profileImageUrl ??
+                              widget.post.userAvatar,
                           radius: 20,
-                          fallbackName: post.userName,
-                        );
-                      },
-                    ),
+                          fallbackName:
+                              _userData?.username ?? widget.post.userName,
+                        ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            post.userName,
+                            _userData?.displayName ??
+                                _userData?.username ??
+                                widget.post.userName,
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.w600),
                           ),
-                          const SizedBox(height: 2),
                           Text(
-                            'Posted a review',
-                            style: TextStyle(
-                              color: Theme.of(
-                                context,
-                              ).textTheme.bodySmall?.color?.withOpacity(0.7),
-                              fontSize: 12,
-                            ),
+                            DateFormat(
+                              'MMM d, yyyy '
+                              'h:mm a',
+                            ).format(widget.post.createdAt),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: Colors.grey[600]),
                           ),
                         ],
                       ),
@@ -101,7 +133,7 @@ class PostListItem extends StatelessWidget {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: Image.network(
-                        post.moviePosterUrl,
+                        widget.post.moviePosterUrl,
                         width: 60,
                         height: 90,
                         fit: BoxFit.cover,
@@ -128,13 +160,13 @@ class PostListItem extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            post.movieTitle,
+                            widget.post.movieTitle,
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            post.movieYear,
+                            widget.post.movieYear,
                             style: TextStyle(
                               color: Theme.of(
                                 context,
@@ -143,32 +175,34 @@ class PostListItem extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          if (post.rating > 0)
+                          if (widget.post.rating > 0)
                             Row(
-                              children: List.generate(post.rating.ceil(), (
-                                index,
-                              ) {
-                                if (index < post.rating.floor()) {
-                                  return const Icon(
-                                    Icons.star,
-                                    color: Colors.amber,
-                                    size: 16,
-                                  );
-                                } else if (index == post.rating.floor() &&
-                                    post.rating % 1 >= 0.5) {
-                                  return const Icon(
-                                    Icons.star_half,
-                                    color: Colors.amber,
-                                    size: 16,
-                                  );
-                                } else {
-                                  return const Icon(
-                                    Icons.star_outlined,
-                                    color: Colors.amber,
-                                    size: 16,
-                                  );
-                                }
-                              }),
+                              children: List.generate(
+                                widget.post.rating.ceil(),
+                                (index) {
+                                  if (index < widget.post.rating.floor()) {
+                                    return const Icon(
+                                      Icons.star,
+                                      color: Colors.amber,
+                                      size: 16,
+                                    );
+                                  } else if (index ==
+                                          widget.post.rating.floor() &&
+                                      widget.post.rating % 1 >= 0.5) {
+                                    return const Icon(
+                                      Icons.star_half,
+                                      color: Colors.amber,
+                                      size: 16,
+                                    );
+                                  } else {
+                                    return const Icon(
+                                      Icons.star_outlined,
+                                      color: Colors.amber,
+                                      size: 16,
+                                    );
+                                  }
+                                },
+                              ),
                             ),
                         ],
                       ),
@@ -177,7 +211,7 @@ class PostListItem extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  post.content,
+                  widget.post.content,
                   style: TextStyle(
                     fontSize: 15,
                     color: Theme.of(
@@ -194,7 +228,9 @@ class PostListItem extends StatelessWidget {
                       Icons.favorite,
                       size: 16,
                       color:
-                          post.likes.contains(auth.currentUser?.uid)
+                          widget.post.likes.contains(
+                                widget.auth.currentUser?.uid,
+                              )
                               ? Colors.red
                               : Theme.of(
                                 context,
@@ -202,7 +238,7 @@ class PostListItem extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      post.likes.length.toString(),
+                      widget.post.likes.length.toString(),
                       style: TextStyle(
                         color: Theme.of(
                           context,
@@ -220,7 +256,7 @@ class PostListItem extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      post.commentCount.toString(),
+                      widget.post.commentCount.toString(),
                       style: TextStyle(
                         color: Theme.of(
                           context,

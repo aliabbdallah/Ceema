@@ -30,6 +30,16 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
   Set<String> _userDiary = {};
   static const int _initialGridSize = 8; // 4x2 grid
 
+  void _sortCredits() {
+    setState(() {
+      _credits.sort((a, b) {
+        final countA = (a['vote_count'] ?? 0).toInt();
+        final countB = (b['vote_count'] ?? 0).toInt();
+        return countB.compareTo(countA);
+      });
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -78,6 +88,7 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
         setState(() {
           _actorDetails = details;
           _credits = List<Map<String, dynamic>>.from(credits['cast'] ?? []);
+          _sortCredits();
           _isLoading = false;
         });
       }
@@ -443,9 +454,10 @@ class _ActorDetailsScreenState extends State<ActorDetailsScreen> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             centerTitle: true,
-            backgroundColor: Colors.transparent,
-            elevation: 0,
+            backgroundColor: Colors.black87,
+            elevation: 4,
             pinned: true,
+            expandedHeight: 0,
           ),
           SliverToBoxAdapter(
             child: Column(

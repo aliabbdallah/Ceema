@@ -15,6 +15,7 @@ import 'package:ceema/services/follow_request_service.dart';
 import 'package:ceema/models/follow_request.dart';
 import 'package:ceema/services/follow_service.dart';
 import 'package:ceema/screens/post_screen.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({Key? key}) : super(key: key);
@@ -230,18 +231,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         break;
     }
 
-    return Dismissible(
+    return Slidable(
       key: Key(notification.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        color: Theme.of(context).colorScheme.error,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 16),
-        child: const Icon(Icons.delete_outline, color: Colors.white),
+      endActionPane: ActionPane(
+        motion: const ScrollMotion(),
+        extentRatio: 0.25,
+        children: [
+          SlidableAction(
+            onPressed: (_) async {
+              await _notificationService.deleteNotification(notification.id);
+            },
+            backgroundColor: Theme.of(context).colorScheme.error,
+            foregroundColor: Colors.white,
+            icon: Icons.delete_outline,
+            label: 'Delete',
+          ),
+        ],
       ),
-      onDismissed: (_) async {
-        await _notificationService.deleteNotification(notification.id);
-      },
       child: Container(
         decoration: BoxDecoration(
           color:

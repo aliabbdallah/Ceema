@@ -368,7 +368,7 @@ class _WatchedMoviesScreenState extends State<WatchedMoviesScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
-            icon: const Icon(Icons.sort),
+            icon: const Icon(Icons.sort_by_alpha),
             onPressed: _showSortDialog,
             tooltip: 'Sort',
           ),

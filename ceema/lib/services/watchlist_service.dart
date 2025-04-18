@@ -1,22 +1,24 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/watchlist_item.dart';
 import '../models/movie.dart';
+import 'tmdb_service.dart'; // Import TMDBService
 
 class WatchlistService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final TMDBService _tmdbService = TMDBService(); // Add TMDBService instance
 
-  // Add a movie to watchlist
+  // Add a movie to watchlist by ID
   Future<void> addToWatchlist({
     required String userId,
-    required Movie movie,
+    required String movieId, // Changed from Movie movie
     String? notes,
   }) async {
-    // Check if the movie is already in the watchlist
+    // Check if the movie is already in the watchlist by ID
     final existingItem =
         await _firestore
             .collection('watchlist_items')
             .where('userId', isEqualTo: userId)
-            .where('movie.id', isEqualTo: movie.id)
+            .where('movie.id', isEqualTo: movieId) // Check using movie ID
             .limit(1)
             .get();
 
@@ -28,19 +30,34 @@ class WatchlistService {
             .doc(existingItem.docs.first.id)
             .update({'notes': notes});
       }
+      print('Movie $movieId already in watchlist for user $userId.');
       return;
     }
 
-    // Add new watchlist item
-    await _firestore.collection('watchlist_items').add({
-      'userId': userId,
-      'movie': movie.toJson(),
-      'addedAt': FieldValue.serverTimestamp(),
-      'notes': notes,
-    });
+    try {
+      // Fetch full movie details from TMDBService
+      final Movie? movie = await _tmdbService.getMovieDetails(movieId);
 
-    // Update user's watchlist count
-    await _updateWatchlistCount(userId);
+      if (movie == null) {
+        throw Exception('Failed to fetch movie details for ID: $movieId');
+      }
+
+      // Add new watchlist item with full details
+      await _firestore.collection('watchlist_items').add({
+        'userId': userId,
+        'movie': movie.toJson(), // Use the fetched movie object
+        'addedAt': FieldValue.serverTimestamp(),
+        'notes': notes,
+      });
+      print('Added movie $movieId to watchlist for user $userId.');
+
+      // Update user's watchlist count
+      await _updateWatchlistCount(userId);
+    } catch (e) {
+      print('Error adding movie $movieId to watchlist: $e');
+      // Re-throw or handle error as needed
+      throw Exception('Failed to add movie to watchlist: $e');
+    }
   }
 
   // Remove a movie from watchlist
@@ -79,7 +96,7 @@ class WatchlistService {
         await _firestore
             .collection('watchlist_items')
             .where('userId', isEqualTo: userId)
-            .where('movie.id', isEqualTo: movieId)
+            .where('movie.id', isEqualTo: movieId) // Check using movie ID
             .limit(1)
             .get();
 

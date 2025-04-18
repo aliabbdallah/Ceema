@@ -17,15 +17,17 @@ class WatchlistItem {
   });
 
   factory WatchlistItem.fromJson(Map<String, dynamic> json, String documentId) {
+    final movieData = json['movie'] as Map<String, dynamic>? ?? {};
     return WatchlistItem(
       id: documentId,
       userId: json['userId'] ?? '',
       movie: Movie(
-        id: json['movie']['id'] ?? '',
-        title: json['movie']['title'] ?? '',
-        posterUrl: json['movie']['posterUrl'] ?? '',
-        year: json['movie']['year'] ?? '',
-        overview: json['movie']['overview'] ?? '',
+        id: movieData['id'] ?? '',
+        title: movieData['title'] ?? '',
+        posterUrl: movieData['posterUrl'] ?? '',
+        year: movieData['year'] ?? '',
+        overview: movieData['overview'] ?? '',
+        director: movieData['director'] ?? '',
       ),
       addedAt: (json['addedAt'] as Timestamp).toDate(),
       notes: json['notes'],

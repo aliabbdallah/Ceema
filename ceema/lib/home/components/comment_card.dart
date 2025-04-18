@@ -317,7 +317,7 @@ class _CommentCardState extends State<CommentCard> {
               },
               child: ProfileImageWidget(
                 imageUrl: widget.comment['userAvatar'],
-                radius: 24,
+                radius: 22,
                 fallbackName: widget.comment['userName'] ?? '',
               ),
             ),

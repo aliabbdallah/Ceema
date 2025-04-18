@@ -530,7 +530,7 @@ class _DiaryScreenState extends State<DiaryScreen> {
         title: const Text('Movie Diary'),
         actions: [
           PopupMenuButton<String>(
-            icon: const Icon(Icons.analytics),
+            icon: const Icon(Icons.sort_by_alpha),
             itemBuilder:
                 (context) => [
                   PopupMenuItem(

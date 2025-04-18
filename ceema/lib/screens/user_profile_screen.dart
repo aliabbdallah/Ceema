@@ -26,6 +26,7 @@ import '../screens/movie_details_screen.dart';
 import 'watched_movies_screen.dart';
 import '../services/dm_service.dart';
 import 'conversation_screen.dart';
+import 'full_screen_image_viewer.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String userId;
@@ -51,6 +52,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   final _diaryService = DiaryService();
   late TabController _tabController;
   String _selectedTab = 'posts';
+  final ScrollController _scrollController = ScrollController();
 
   bool _isLoadingFriendship = false;
   String? _errorMessage;
@@ -72,6 +74,7 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -682,9 +685,35 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                   children: [
                     const SizedBox(height: 20),
                     ProfileImageWidget(
-                      imageUrl: user.profileImageUrl,
+                      imageUrl: user.profileImageUrl ?? '',
                       radius: 50,
                       fallbackName: user.username,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          PageRouteBuilder(
+                            opaque: false,
+                            barrierColor: Colors.transparent,
+                            pageBuilder:
+                                (context, animation, secondaryAnimation) =>
+                                    FullScreenImageViewer(
+                                      imageUrl: user.profileImageUrl ?? '',
+                                      fallbackText: user.username,
+                                    ),
+                            transitionsBuilder: (
+                              context,
+                              animation,
+                              secondaryAnimation,
+                              child,
+                            ) {
+                              return FadeTransition(
+                                opacity: animation,
+                                child: child,
+                              );
+                            },
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -787,6 +816,12 @@ class _UserProfileScreenState extends State<UserProfileScreen>
                           _selectedTab == 'posts'
                               ? _buildPostList()
                               : _buildDiaryList(),
+                      transitionBuilder: (
+                        Widget child,
+                        Animation<double> animation,
+                      ) {
+                        return FadeTransition(opacity: animation, child: child);
+                      },
                     ),
 
                     const SizedBox(height: 30),

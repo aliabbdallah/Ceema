@@ -1,19 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/services.dart';
 import 'trending_movies_section.dart';
 import 'post_card.dart';
 import '../../models/post.dart';
 import '../../services/post_service.dart';
 import '../../services/post_recommendation_service.dart';
-import 'compose_post_section.dart';
-import '../../screens/search_screen.dart';
-import '../../screens/notifications_screen.dart';
-import '../../services/notification_service.dart';
-import '../../widgets/profile_image_widget.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../screens/compose_post_screen.dart';
 import 'app_bar.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
@@ -135,20 +130,30 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
     });
 
     try {
+      debugPrint('Loading For You recommendations...');
       final result = await _recommendationService.getRecommendedPosts(
         limit: 20,
       );
+
+      debugPrint('Received ${result.posts.length} recommendations');
+
       if (mounted) {
         setState(() {
           _cachedForYouPosts = result.posts;
           _isForYouLoading = false;
         });
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('Error loading recommendations: $e');
+      debugPrint('Stack trace: $stackTrace');
+
       if (mounted) {
         setState(() {
           _isForYouLoading = false;
+          // Keep existing recommendations if available
+          if (_cachedForYouPosts.isEmpty) {
+            _cachedForYouPosts = [];
+          }
         });
       }
     }
@@ -253,10 +258,68 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
                     final username = snapshot.data?.get('username') as String?;
                     final displayName = _auth.currentUser?.displayName;
 
-                    return ProfileImageWidget(
-                      imageUrl: profileImageUrl,
-                      radius: 30,
-                      fallbackName: username ?? displayName ?? "User",
+                    return CachedNetworkImage(
+                      imageUrl: profileImageUrl ?? '',
+                      imageBuilder:
+                          (context, imageProvider) => Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              image: DecorationImage(
+                                image: imageProvider,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                      placeholder:
+                          (context, url) => Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color:
+                                  Theme.of(context).colorScheme.surfaceVariant,
+                            ),
+                            child: Center(
+                              child: Text(
+                                (username ?? displayName ?? "U")[0]
+                                    .toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color:
+                                      Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ),
+                      errorWidget:
+                          (context, url, error) => Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color:
+                                  Theme.of(context).colorScheme.surfaceVariant,
+                            ),
+                            child: Center(
+                              child: Text(
+                                (username ?? displayName ?? "U")[0]
+                                    .toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color:
+                                      Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ),
                     );
                   },
                 ),
@@ -385,110 +448,170 @@ class _SeamlessFeedScreenState extends State<SeamlessFeedScreen>
               ),
 
               // Content based on selected tab
-              SliverFillRemaining(
-                child: PageView(
-                  controller: _pageController,
-                  onPageChanged: _onPageChanged,
-                  children: [
-                    // All tab content
-                    CustomScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        if (_showTrendingMoviesSection)
-                          const SliverToBoxAdapter(
-                            child: TrendingMoviesSection(),
+              SliverToBoxAdapter(
+                child: Container(
+                  height:
+                      MediaQuery.of(context).size.height -
+                      kToolbarHeight -
+                      56 -
+                      MediaQuery.of(context).padding.top -
+                      MediaQuery.of(context).padding.bottom,
+                  child: PageView(
+                    controller: _pageController,
+                    onPageChanged: _onPageChanged,
+                    children: [
+                      // All tab content
+                      CustomScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          if (_showTrendingMoviesSection)
+                            const SliverToBoxAdapter(
+                              child: TrendingMoviesSection(),
+                            ),
+                          StreamBuilder<List<Post>>(
+                            stream: _postService.getPosts(),
+                            builder: _buildPostStreamContent,
                           ),
-                        StreamBuilder<List<Post>>(
-                          stream: _postService.getPosts(),
-                          builder: _buildPostStreamContent,
-                        ),
-                      ],
-                    ),
-                    // For You tab content
-                    CustomScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        if (_showTrendingMoviesSection)
-                          const SliverToBoxAdapter(
-                            child: TrendingMoviesSection(),
-                          ),
-                        if (_isForYouLoading)
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.all(32.0),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.local_fire_department,
-                                    size: 48,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary.withOpacity(0.5),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'Personalizing your feed',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color:
-                                          Theme.of(
-                                            context,
-                                          ).colorScheme.onSurface,
+                        ],
+                      ),
+                      // For You tab content
+                      CustomScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          if (_showTrendingMoviesSection)
+                            const SliverToBoxAdapter(
+                              child: TrendingMoviesSection(),
+                            ),
+                          if (_isForYouLoading)
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.all(32.0),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.local_fire_department,
+                                      size: 48,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary.withOpacity(0.5),
                                     ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'We\'re finding the best content for you',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color:
-                                          Theme.of(
-                                            context,
-                                          ).colorScheme.onSurfaceVariant,
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'Personalizing your feed',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color:
+                                            Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 24),
-                                  CircularProgressIndicator(
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
-                                  ),
-                                ],
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'We\'re finding the best content for you',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color:
+                                            Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    CircularProgressIndicator(
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          else
+                            SliverList(
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) {
+                                  if (index == _cachedForYouPosts.length) {
+                                    return const SizedBox(height: 80);
+                                  }
+
+                                  if (_cachedForYouPosts.isEmpty) {
+                                    return Padding(
+                                      padding: const EdgeInsets.all(32.0),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.local_fire_department,
+                                            size: 64,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .primary
+                                                .withOpacity(0.5),
+                                          ),
+                                          const SizedBox(height: 16),
+                                          Text(
+                                            'No recommendations yet',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color:
+                                                  Theme.of(
+                                                    context,
+                                                  ).colorScheme.onSurface,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Like some posts, follow users, and rate movies to get personalized recommendations',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color:
+                                                  Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 24),
+                                          ElevatedButton(
+                                            onPressed: _refreshFeed,
+                                            child: const Text('Try Again'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }
+
+                                  return SeamlessPostCard(
+                                    post: _cachedForYouPosts[index],
+                                    relevanceReason:
+                                        'Recommended based on your preferences',
+                                  );
+                                },
+                                childCount:
+                                    _cachedForYouPosts.isEmpty
+                                        ? 1
+                                        : _cachedForYouPosts.length + 1,
                               ),
                             ),
-                          )
-                        else
-                          SliverList(
-                            delegate: SliverChildBuilderDelegate((
-                              context,
-                              index,
-                            ) {
-                              if (index == _cachedForYouPosts.length) {
-                                return const SizedBox(height: 80);
-                              }
-                              return SeamlessPostCard(
-                                post: _cachedForYouPosts[index],
-                                relevanceReason:
-                                    'Recommended based on your preferences',
-                              );
-                            }, childCount: _cachedForYouPosts.length + 1),
+                        ],
+                      ),
+                      // Following tab content
+                      CustomScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          StreamBuilder<List<Post>>(
+                            stream: _postService.getFollowingPosts(
+                              _auth.currentUser!.uid,
+                            ),
+                            builder: _buildPostStreamContent,
                           ),
-                      ],
-                    ),
-                    // Following tab content
-                    CustomScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        StreamBuilder<List<Post>>(
-                          stream: _postService.getFollowingPosts(
-                            _auth.currentUser!.uid,
-                          ),
-                          builder: _buildPostStreamContent,
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],

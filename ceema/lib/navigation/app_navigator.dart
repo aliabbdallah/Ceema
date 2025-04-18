@@ -35,23 +35,15 @@ class AppNavigatorState extends State<AppNavigator> {
 
   void _changePage(int index) {
     if (_currentTab == index) {
-      // If clicking the current tab, reset to root and scroll to top
+      // If clicking the current tab, pop to root
       _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
-
-      // Find and scroll the first scrollable widget to top
-      final context = _navigatorKeys[index].currentContext;
-      if (context != null) {
-        final scrollable = Scrollable.of(context);
-        if (scrollable != null) {
-          scrollable.position.animateTo(
-            0,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        }
-      }
       return;
     }
+
+    // If switching to a different tab, pop all routes in the current tab
+    _navigatorKeys[_currentTab].currentState?.popUntil(
+      (route) => route.isFirst,
+    );
 
     setState(() {
       _isPageChanging = true;
@@ -74,15 +66,14 @@ class AppNavigatorState extends State<AppNavigator> {
 
     return WillPopScope(
       onWillPop: () async {
-        final isFirstRouteInCurrentTab =
-            !await _navigatorKeys[_currentTab].currentState!.maybePop();
-        if (isFirstRouteInCurrentTab) {
-          if (_currentTab != 0) {
-            _changePage(0);
+        final currentNavigator = _navigatorKeys[_currentTab].currentState;
+        if (currentNavigator != null) {
+          if (currentNavigator.canPop()) {
+            currentNavigator.pop();
             return false;
           }
         }
-        return isFirstRouteInCurrentTab;
+        return true;
       },
       child: Scaffold(
         body: PageView(
@@ -96,46 +87,71 @@ class AppNavigatorState extends State<AppNavigator> {
           children: [
             Navigator(
               key: _navigatorKeys[0],
-              onGenerateRoute:
-                  (settings) => MaterialPageRoute(
+              initialRoute: '/',
+              onGenerateRoute: (settings) {
+                if (settings.name == '/') {
+                  return MaterialPageRoute(
                     builder: (context) => const HomeScreen(),
-                  ),
+                  );
+                }
+                return null;
+              },
             ),
             Navigator(
               key: _navigatorKeys[1],
-              onGenerateRoute:
-                  (settings) => MaterialPageRoute(
+              initialRoute: '/',
+              onGenerateRoute: (settings) {
+                if (settings.name == '/') {
+                  return MaterialPageRoute(
                     builder: (context) => const SearchScreen(),
-                  ),
+                  );
+                }
+                return null;
+              },
             ),
             Navigator(
               key: _navigatorKeys[2],
-              onGenerateRoute:
-                  (settings) => MaterialPageRoute(
+              initialRoute: '/',
+              onGenerateRoute: (settings) {
+                if (settings.name == '/') {
+                  return MaterialPageRoute(
                     builder: (context) => const DiaryScreen(),
-                  ),
+                  );
+                }
+                return null;
+              },
             ),
             Navigator(
               key: _navigatorKeys[3],
-              onGenerateRoute:
-                  (settings) => MaterialPageRoute(
+              initialRoute: '/',
+              onGenerateRoute: (settings) {
+                if (settings.name == '/') {
+                  return MaterialPageRoute(
                     builder:
                         (context) => WatchlistScreen(
                           userId: currentUser?.uid ?? '',
                           isCurrentUser: true,
                         ),
-                  ),
+                  );
+                }
+                return null;
+              },
             ),
             Navigator(
               key: _navigatorKeys[4],
-              onGenerateRoute:
-                  (settings) => MaterialPageRoute(
+              initialRoute: '/',
+              onGenerateRoute: (settings) {
+                if (settings.name == '/') {
+                  return MaterialPageRoute(
                     builder:
                         (context) => ProfileScreen(
                           userId: currentUser?.uid ?? '',
                           isCurrentUser: true,
                         ),
-                  ),
+                  );
+                }
+                return null;
+              },
             ),
           ],
         ),

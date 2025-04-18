@@ -24,6 +24,7 @@ import '../widgets/podium_widget.dart';
 import '../screens/movie_details_screen.dart';
 import 'watched_movies_screen.dart';
 import 'package:rxdart/rxdart.dart';
+import 'full_screen_image_viewer.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String userId;
@@ -49,6 +50,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   String _selectedTab = 'posts';
   late BehaviorSubject<UserModel> _userSubject;
   StreamSubscription? _userSubscription;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -59,12 +61,51 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   void _setupUserStream() {
+    // Cancel any existing subscription
+    _userSubscription?.cancel();
+
+    // Create new subscription with error handling
     _userSubscription = _profileService
         .getUserProfileStream(widget.userId)
         .listen(
-          (user) => _userSubject.add(user),
-          onError: (error) => _userSubject.addError(error),
+          (user) {
+            if (mounted) {
+              _userSubject.add(user);
+            }
+          },
+          onError: (error) {
+            if (mounted) {
+              // Show error in UI
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error loading profile: $error'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              // Try to refresh the data
+              _refreshProfile();
+            }
+          },
         );
+  }
+
+  // Method to manually refresh profile data
+  Future<void> _refreshProfile() async {
+    try {
+      final user = await _profileService.getUserProfile(widget.userId);
+      if (mounted) {
+        _userSubject.add(user);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error refreshing profile: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -72,6 +113,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     _tabController.dispose();
     _userSubscription?.cancel();
     _userSubject.close();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -443,7 +485,19 @@ class _ProfileScreenState extends State<ProfileScreen>
         stream: _userSubject.stream,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Error: ${snapshot.error}'),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _refreshProfile,
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            );
           }
 
           if (!snapshot.hasData) {
@@ -509,9 +563,35 @@ class _ProfileScreenState extends State<ProfileScreen>
                   children: [
                     const SizedBox(height: 20),
                     ProfileImageWidget(
-                      imageUrl: user.profileImageUrl,
+                      imageUrl: user.profileImageUrl ?? '',
                       radius: 50,
                       fallbackName: user.username,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          PageRouteBuilder(
+                            opaque: false,
+                            barrierColor: Colors.transparent,
+                            pageBuilder:
+                                (context, animation, secondaryAnimation) =>
+                                    FullScreenImageViewer(
+                                      imageUrl: user.profileImageUrl ?? '',
+                                      fallbackText: user.username,
+                                    ),
+                            transitionsBuilder: (
+                              context,
+                              animation,
+                              secondaryAnimation,
+                              child,
+                            ) {
+                              return FadeTransition(
+                                opacity: animation,
+                                child: child,
+                              );
+                            },
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -562,8 +642,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                           _selectedTab == 'posts'
                               ? _buildPostList()
                               : _buildDiaryList(),
+                      transitionBuilder: (
+                        Widget child,
+                        Animation<double> animation,
+                      ) {
+                        return FadeTransition(opacity: animation, child: child);
+                      },
                     ),
-                    const SizedBox(height: 30),
                   ],
                 ),
               ),

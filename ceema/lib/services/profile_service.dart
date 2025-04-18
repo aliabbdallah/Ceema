@@ -7,13 +7,15 @@ import 'package:image/image.dart' as img;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user.dart';
-import 'profile_cache_service.dart';
+import 'dart:async'; // Added for StreamController
 
 class ProfileService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ImagePicker _picker = ImagePicker();
-  final ProfileCacheService _profileCache = ProfileCacheService();
+
+  // Stream controllers for real-time updates (moved from ProfileCacheService)
+  final Map<String, StreamController<UserModel>> _profileStreamControllers = {};
 
   // Method to pick and process image
   Future<String?> pickAndProcessImage() async {
@@ -109,15 +111,81 @@ class ProfileService {
 
       // Force refresh the Firebase Auth user data
       await user.reload();
-
-      // Clear the profile cache for this user
-      _profileCache.clearUserCache(user.uid);
     }
   }
 
-  // Get user profile with friend stats
+  // Get user profile stream (logic moved from ProfileCacheService)
   Stream<UserModel> getUserProfileStream(String userId) {
-    return _profileCache.getUserProfileStream(userId);
+    // Create or get existing stream controller
+    if (!_profileStreamControllers.containsKey(userId) ||
+        _profileStreamControllers[userId]!.isClosed) {
+      _profileStreamControllers[userId] =
+          StreamController<UserModel>.broadcast();
+      _setupProfileListener(userId); // Use the listener within this service
+    }
+    return _profileStreamControllers[userId]!.stream;
+  }
+
+  // Set up Firestore listener for profile updates (moved from ProfileCacheService)
+  void _setupProfileListener(String userId) {
+    _firestore.collection('users').doc(userId).snapshots().listen((doc) async {
+      if (!doc.exists) {
+        // Optionally add error handling or specific logic if user doc disappears
+        print('User document $userId does not exist.');
+        _profileStreamControllers[userId]?.addError(
+          'User not found',
+        ); // Add error to stream
+        return;
+      }
+
+      try {
+        // Get friend stats (same as before)
+        final followersCount =
+            await _firestore
+                .collection('follows')
+                .where('followedId', isEqualTo: userId)
+                .count()
+                .get();
+
+        final followingCount =
+            await _firestore
+                .collection('follows')
+                .where('followerId', isEqualTo: userId)
+                .count()
+                .get();
+
+        final mutualCount =
+            await _firestore
+                .collection('follows')
+                .where('followerId', isEqualTo: userId)
+                .where('isMutual', isEqualTo: true)
+                .count()
+                .get();
+
+        // Create user model with friend stats
+        final userData = doc.data()!;
+        userData['followersCount'] = followersCount.count;
+        userData['followingCount'] = followingCount.count;
+        userData['mutualFriendsCount'] = mutualCount.count;
+
+        final profile = UserModel.fromJson(userData, doc.id);
+
+        // Add to stream if controller exists and is not closed
+        if (_profileStreamControllers.containsKey(userId) &&
+            !_profileStreamControllers[userId]!.isClosed) {
+          _profileStreamControllers[userId]!.add(profile);
+        }
+      } catch (e) {
+        print('Error processing user update for $userId: $e');
+        // Add error to the stream if the controller is still valid
+        if (_profileStreamControllers.containsKey(userId) &&
+            !_profileStreamControllers[userId]!.isClosed) {
+          _profileStreamControllers[userId]!.addError(
+            'Failed to process profile update: $e',
+          );
+        }
+      }
+    });
   }
 
   // Update user stats after friend actions
@@ -151,9 +219,57 @@ class ProfileService {
     });
   }
 
-  // Get user profile data
-  Future<Map<String, dynamic>> getUserProfile(String userId) async {
-    final doc = await _firestore.collection('users').doc(userId).get();
-    return doc.data() ?? {};
+  // Get user profile data (for single fetch)
+  Future<UserModel> getUserProfile(String userId) async {
+    // Changed return type
+    try {
+      final doc = await _firestore.collection('users').doc(userId).get();
+      if (!doc.exists) {
+        throw Exception('User not found');
+      }
+
+      // Get friend stats
+      final followersCount =
+          await _firestore
+              .collection('follows')
+              .where('followedId', isEqualTo: userId)
+              .count()
+              .get();
+
+      final followingCount =
+          await _firestore
+              .collection('follows')
+              .where('followerId', isEqualTo: userId)
+              .count()
+              .get();
+
+      final mutualCount =
+          await _firestore
+              .collection('follows')
+              .where('followerId', isEqualTo: userId)
+              .where('isMutual', isEqualTo: true)
+              .count()
+              .get();
+
+      // Create user model with friend stats
+      final userData = doc.data()!;
+      userData['followersCount'] = followersCount.count;
+      userData['followingCount'] = followingCount.count;
+      userData['mutualFriendsCount'] = mutualCount.count;
+
+      return UserModel.fromJson(userData, doc.id);
+    } catch (e) {
+      print('Error getting user profile for $userId: $e');
+      rethrow; // Rethrow to allow callers to handle
+    }
+  }
+
+  // Dispose method to clean up stream controllers
+  void dispose() {
+    for (final controller in _profileStreamControllers.values) {
+      controller.close();
+    }
+    _profileStreamControllers.clear();
+    print('ProfileService disposed and controllers closed.');
   }
 }

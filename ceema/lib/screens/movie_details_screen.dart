@@ -2,17 +2,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:confetti/confetti.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import 'package:flutter/services.dart';
-import 'dart:math' as math;
 import '../models/movie.dart';
 import '../services/tmdb_service.dart';
 import '../services/watchlist_service.dart';
 import '../services/diary_service.dart';
 import '../widgets/star_rating.dart';
 import 'diary_entry_form.dart';
-import 'package:flutter/rendering.dart';
 import 'actor_details_screen.dart';
 import '../services/movie_rating_service.dart';
 import '../services/profile_service.dart';
@@ -37,11 +32,8 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
   late ScrollController _scrollController;
   late AnimationController _ratingAnimationController;
   late TabController _tabController;
-  List<YoutubePlayerController> _videoControllers = [];
   bool _isOverviewExpanded = false;
   bool _isCrewExpanded = false;
-  bool _isFullscreen = false;
-  int? _currentFullscreenVideoIndex;
 
   bool _isLoading = true;
   bool _isInWatchlist = false;
@@ -75,13 +67,6 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
     _ratingAnimationController.dispose();
     _tabController.dispose();
     _scrollController.dispose();
-    for (var controller in _videoControllers) {
-      controller.dispose();
-    }
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
     super.dispose();
   }
 
@@ -93,23 +78,6 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
       final cast = await TMDBService.getCast(widget.movie.id);
       final crew = await TMDBService.getCrew(widget.movie.id);
       final videos = await TMDBService.getVideos(widget.movie.id);
-
-      // Initialize video controllers
-      _videoControllers =
-          videos.map((video) {
-            return YoutubePlayerController(
-              initialVideoId: video['key'],
-              flags: const YoutubePlayerFlags(
-                autoPlay: false,
-                mute: false,
-                disableDragSeek: false,
-                loop: false,
-                isLive: false,
-                forceHD: false,
-                enableCaption: true,
-              ),
-            );
-          }).toList();
 
       if (mounted) {
         setState(() {
@@ -254,7 +222,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
       } else {
         await _watchlistService.addToWatchlist(
           userId: _auth.currentUser!.uid,
-          movie: widget.movie,
+          movieId: widget.movie.id,
         );
       }
 
@@ -420,7 +388,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
 
   Widget _buildHeader() {
     return SliverAppBar(
-      expandedHeight: 300.0,
+      expandedHeight: 200.0,
       floating: false,
       pinned: true,
       flexibleSpace: FlexibleSpaceBar(
@@ -437,7 +405,12 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.black.withOpacity(0.7)],
+                  colors: [
+                    Colors.black.withOpacity(0.2),
+                    Colors.black.withOpacity(0.6),
+                    Colors.black.withOpacity(0.9),
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
                 ),
               ),
             ),
@@ -921,125 +894,35 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
   }
 
   Widget _buildTrailersSection() {
-    if (_videos.isEmpty) return const SizedBox();
-
-    return OrientationBuilder(
-      builder: (context, orientation) {
-        if (orientation == Orientation.landscape && _isFullscreen) {
-          // Full screen view in landscape mode
-          return Scaffold(
-            body: Center(
-              child: YoutubePlayer(
-                controller:
-                    _videoControllers[_currentFullscreenVideoIndex ?? 0],
-                showVideoProgressIndicator: true,
-                progressIndicatorColor: Theme.of(context).colorScheme.primary,
-                progressColors: ProgressBarColors(
-                  playedColor: Theme.of(context).colorScheme.primary,
-                  handleColor: Theme.of(context).colorScheme.primaryContainer,
-                ),
-                onReady: () {
-                  print('Video is ready to play in fullscreen');
-                },
-                bottomActions: [
-                  CurrentPosition(),
-                  ProgressBar(
-                    isExpanded: true,
-                    colors: ProgressBarColors(
-                      playedColor: Theme.of(context).colorScheme.primary,
-                      handleColor:
-                          Theme.of(context).colorScheme.primaryContainer,
-                      bufferedColor: Theme.of(
-                        context,
-                      ).colorScheme.primaryContainer.withOpacity(0.4),
-                    ),
-                  ),
-                  RemainingDuration(),
-                  FullScreenButton(
-                    controller:
-                        _videoControllers[_currentFullscreenVideoIndex ?? 0],
-                  ),
-                ],
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.movie_outlined,
+              size: 48,
+              color: Theme.of(context).colorScheme.secondary.withOpacity(0.7),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Trailers Coming Soon!',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'We\'re working on bringing you movie trailers. Stay tuned!',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
-          );
-        } else {
-          // Normal view with list of videos
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _videos.length,
-            itemBuilder: (context, index) {
-              final video = _videos[index];
-              return Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: YoutubePlayerBuilder(
-                    onEnterFullScreen: () {
-                      setState(() {
-                        _isFullscreen = true;
-                        _currentFullscreenVideoIndex = index;
-                      });
-                      SystemChrome.setPreferredOrientations([
-                        DeviceOrientation.landscapeLeft,
-                        DeviceOrientation.landscapeRight,
-                      ]);
-                    },
-                    onExitFullScreen: () {
-                      setState(() {
-                        _isFullscreen = false;
-                        _currentFullscreenVideoIndex = null;
-                      });
-                      SystemChrome.setPreferredOrientations([
-                        DeviceOrientation.portraitUp,
-                        DeviceOrientation.portraitDown,
-                      ]);
-                    },
-                    player: YoutubePlayer(
-                      controller: _videoControllers[index],
-                      showVideoProgressIndicator: true,
-                      progressIndicatorColor:
-                          Theme.of(context).colorScheme.primary,
-                      progressColors: ProgressBarColors(
-                        playedColor: Theme.of(context).colorScheme.primary,
-                        handleColor:
-                            Theme.of(context).colorScheme.primaryContainer,
-                      ),
-                      onReady: () {
-                        print('Video $index is ready to play');
-                      },
-                      bottomActions: [
-                        CurrentPosition(),
-                        ProgressBar(isExpanded: true),
-                        RemainingDuration(),
-                        FullScreenButton(),
-                      ],
-                    ),
-                    builder: (context, player) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          player,
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8.0),
-                            child: Text(
-                              video['name'] ?? 'Video ${index + 1}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-              );
-            },
-          );
-        }
-      },
+          ],
+        ),
+      ),
     );
   }
 
@@ -1123,45 +1006,10 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
 
     return WillPopScope(
       onWillPop: () async {
-        if (_isFullscreen) {
-          setState(() {
-            _isFullscreen = false;
-            _currentFullscreenVideoIndex = null;
-          });
-          await SystemChrome.setPreferredOrientations([
-            DeviceOrientation.portraitUp,
-            DeviceOrientation.portraitDown,
-          ]);
-          return false; // Don't exit the screen
-        }
         return true; // Allow exit
       },
       child: OrientationBuilder(
         builder: (context, orientation) {
-          // If in landscape and fullscreen mode, show only the video player
-          if (orientation == Orientation.landscape &&
-              _isFullscreen &&
-              _currentFullscreenVideoIndex != null) {
-            return Scaffold(
-              body: Center(
-                child: YoutubePlayer(
-                  controller: _videoControllers[_currentFullscreenVideoIndex!],
-                  showVideoProgressIndicator: true,
-                  progressIndicatorColor: Theme.of(context).colorScheme.primary,
-                  bottomActions: [
-                    CurrentPosition(),
-                    ProgressBar(isExpanded: true),
-                    RemainingDuration(),
-                    FullScreenButton(
-                      controller:
-                          _videoControllers[_currentFullscreenVideoIndex!],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
           // Otherwise show normal UI
           return Scaffold(
             body: CustomScrollView(

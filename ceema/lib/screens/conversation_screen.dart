@@ -5,6 +5,7 @@ import '../services/dm_service.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../widgets/profile_image_widget.dart';
 
 class ConversationScreen extends StatefulWidget {
   final String conversationId;
@@ -449,17 +450,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
                     snapshot.data?.get('profileImageUrl') as String?;
                 final username = snapshot.data?.get('username') as String?;
 
-                return CircleAvatar(
-                  backgroundImage:
-                      profileImageUrl != null && profileImageUrl.isNotEmpty
-                          ? NetworkImage(profileImageUrl)
-                          : null,
-                  child:
-                      profileImageUrl == null || profileImageUrl.isEmpty
-                          ? Text(
-                            (username ?? widget.otherUsername)[0].toUpperCase(),
-                          )
-                          : null,
+                return ProfileImageWidget(
+                  imageUrl: profileImageUrl,
+                  radius: 20,
+                  fallbackName: username ?? widget.otherUsername,
                 );
               },
             ),

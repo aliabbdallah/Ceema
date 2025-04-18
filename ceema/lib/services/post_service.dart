@@ -4,15 +4,23 @@ import '../models/post.dart';
 import '../models/movie.dart';
 import 'notification_service.dart';
 import 'follow_service.dart';
-import 'profile_cache_service.dart';
+import 'profile_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../models/user.dart';
 
 class PostService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final NotificationService _notificationService = NotificationService();
   final FollowService _followService = FollowService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final ProfileCacheService _profileCache = ProfileCacheService();
+  final ProfileService _profileService = ProfileService();
+
+  // Cache for posts
+  final Map<String, List<Post>> _postsCache = {};
+  final Map<String, DateTime> _cacheTimestamps = {};
+  // Use different expiration for general and following posts
+  static const Duration _generalCacheExpiration = Duration(minutes: 5);
+  static const Duration _followingCacheExpiration = Duration(minutes: 10);
 
   Future<void> createPost({
     required String userId,
@@ -40,6 +48,7 @@ class PostService {
     });
   }
 
+  // Get all posts with user data
   Stream<List<Post>> getPosts() {
     return _firestore
         .collection('posts')
@@ -47,13 +56,12 @@ class PostService {
         .limit(50) // Limit to most recent 50 posts for better performance
         .snapshots()
         .asyncMap((snapshot) async {
+          // Directly fetch and process posts without checking cache
           final posts = await Future.wait(
             snapshot.docs.map((doc) async {
               final postData = doc.data();
-              // Fetch the current user data (using cache)
               final userData = await _getUserData(postData['userId']);
 
-              // Create post with updated user data
               return Post.fromJson({
                 ...postData,
                 'username': userData['username'] ?? postData['userName'],
@@ -67,8 +75,10 @@ class PostService {
             }),
           );
 
-          // Sort by creation time to ensure newest posts appear first
+          // Sort by creation time
           posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+          // Return fresh posts directly
           return posts;
         });
   }
@@ -81,11 +91,85 @@ class PostService {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .asyncMap((snapshot) async {
-          // Fetch the current user data (using cache)
-          final userData = await _getUserData(userId);
+          final cacheKey = 'user_posts_$userId';
+          final now = DateTime.now();
 
-          return snapshot.docs.map((doc) {
+          // Check cache first
+          if (_postsCache.containsKey(cacheKey) &&
+              _cacheTimestamps.containsKey(cacheKey) &&
+              now.difference(_cacheTimestamps[cacheKey]!) <
+                  _generalCacheExpiration) {
+            // Use general expiration
+            return _postsCache[cacheKey]!;
+          }
+
+          final userData = await _getUserData(userId);
+          final posts =
+              snapshot.docs.map((doc) {
+                final postData = doc.data();
+                return Post.fromJson({
+                  ...postData,
+                  'username': userData['username'] ?? postData['userName'],
+                  'displayName':
+                      userData['displayName'] ??
+                      userData['username'] ??
+                      postData['userName'],
+                  'profileImageUrl':
+                      userData['profileImageUrl'] ?? postData['userAvatar'],
+                }, doc.id);
+              }).toList();
+
+          // Update cache
+          _postsCache[cacheKey] = posts;
+          _cacheTimestamps[cacheKey] = now;
+
+          return posts;
+        });
+  }
+
+  Stream<List<Post>> getFollowingPosts(String userId) async* {
+    final cacheKey = 'following_posts_$userId';
+    final now = DateTime.now();
+
+    // Check cache first
+    if (_postsCache.containsKey(cacheKey) &&
+        _cacheTimestamps.containsKey(cacheKey) &&
+        now.difference(_cacheTimestamps[cacheKey]!) <
+            _followingCacheExpiration) {
+      // Use following-specific expiration
+      yield _postsCache[cacheKey]!;
+      return; // Return cached data and exit
+    }
+
+    try {
+      // Get list of users that the current user follows
+      final following = await _followService.getFollowing(userId).first;
+      final followingIds =
+          following.map((follow) => follow.followedId).toList();
+
+      if (followingIds.isEmpty) {
+        _postsCache[cacheKey] = []; // Cache empty list
+        _cacheTimestamps[cacheKey] = now;
+        yield [];
+        return;
+      }
+
+      // Fetch posts in chunks due to Firestore 'whereIn' limit
+      List<Post> allPosts = [];
+      for (var i = 0; i < followingIds.length; i += 10) {
+        final chunk = followingIds.skip(i).take(10).toList();
+        final querySnapshot =
+            await _firestore
+                .collection('posts')
+                .where('userId', whereIn: chunk)
+                // No need to order here, we'll sort the combined list later
+                .get();
+
+        // Fetch user data for authors in this chunk concurrently
+        final postsFromChunk = await Future.wait(
+          querySnapshot.docs.map((doc) async {
             final postData = doc.data();
+            final userData = await _getUserData(postData['userId']);
             return Post.fromJson({
               ...postData,
               'username': userData['username'] ?? postData['userName'],
@@ -96,121 +180,23 @@ class PostService {
               'profileImageUrl':
                   userData['profileImageUrl'] ?? postData['userAvatar'],
             }, doc.id);
-          }).toList();
-        });
-  }
-
-  /// Get posts from users that the current user follows
-  /// Uses a direct querying approach for reliability
-  Stream<List<Post>> getFollowingPosts(String userId) {
-    // Create a StreamController to manage our combined data
-    final controller = StreamController<List<Post>>.broadcast();
-
-    // Function to load data
-    Future<void> loadPosts() async {
-      try {
-        // Show loading state
-        controller.add([]);
-
-        // Get users that current user follows (limit to 30 for performance)
-        final following = await _followService.getFollowing(userId).first;
-
-        // If not following anyone, return empty list
-        if (following.isEmpty) {
-          controller.add([]);
-          return;
-        }
-
-        // Get IDs of followed users (limited to 30 most recent)
-        final followingIds =
-            following
-                .take(30) // Limit to 30 followed users for performance
-                .map((follow) => follow.followedId)
-                .toList();
-
-        // Fetch posts in smaller direct batches to avoid Firestore limitations
-        final allPosts = <Post>[];
-
-        // Process in batches of 5 users at a time (for parallel fetching)
-        for (var i = 0; i < followingIds.length; i += 5) {
-          final end =
-              (i + 5 < followingIds.length) ? i + 5 : followingIds.length;
-          final batchIds = followingIds.sublist(i, end);
-
-          // Create a list of futures for each user's posts
-          final futures =
-              batchIds
-                  .map(
-                    (followedId) =>
-                        _firestore
-                            .collection('posts')
-                            .where('userId', isEqualTo: followedId)
-                            .orderBy('createdAt', descending: true)
-                            .limit(10) // Limit to 10 most recent posts per user
-                            .get(),
-                  )
-                  .toList();
-
-          // Wait for all futures to complete
-          final results = await Future.wait(futures);
-
-          // Process each result
-          for (final querySnapshot in results) {
-            final docs = querySnapshot.docs;
-            if (docs.isEmpty) continue;
-
-            // Process each document
-            for (final doc in docs) {
-              final postData = doc.data();
-              final postUserId = postData['userId'] as String;
-
-              // Get user data (from cache)
-              final userData = await _getUserData(postUserId);
-
-              // Create post object
-              final post = Post.fromJson({
-                ...postData,
-                'username': userData['username'] ?? postData['userName'],
-                'displayName':
-                    userData['displayName'] ??
-                    userData['username'] ??
-                    postData['userName'],
-                'profileImageUrl':
-                    userData['profileImageUrl'] ?? postData['userAvatar'],
-              }, doc.id);
-
-              allPosts.add(post);
-            }
-          }
-        }
-
-        // Sort posts by creation date (newest first)
-        allPosts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
-        // Send sorted posts to the stream
-        controller.add(allPosts);
-      } catch (e) {
-        controller.addError(e);
+          }),
+        );
+        allPosts.addAll(postsFromChunk);
       }
+
+      // Sort the combined list by creation time
+      allPosts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      // Update cache
+      _postsCache[cacheKey] = allPosts;
+      _cacheTimestamps[cacheKey] = now;
+
+      yield allPosts; // Yield the complete, sorted list
+    } catch (e) {
+      print('Error getting following posts: $e');
+      yield []; // Yield empty list on error
     }
-
-    // Initial load
-    loadPosts();
-
-    // Set up a timer for periodic refresh (every 30 seconds)
-    final timer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (!controller.isClosed) {
-        loadPosts();
-      }
-    });
-
-    // Clean up when the stream is closed
-    controller.onCancel = () {
-      timer.cancel();
-      controller.close();
-    };
-
-    return controller.stream;
   }
 
   // Toggle like on a post
@@ -567,11 +553,32 @@ class PostService {
   // Fetch user data with caching
   Future<Map<String, dynamic>> _getUserData(String userId) async {
     try {
-      final userModel = await _profileCache.getUserProfile(userId);
+      final userModel = await _profileService.getUserProfile(userId);
       return userModel.toJson();
     } catch (e) {
       print('Error getting user data: $e');
       return {};
     }
+  }
+
+  // Clear cache for a specific key (used for manual refresh)
+  void clearCache(String key) {
+    _postsCache.remove(key);
+    _cacheTimestamps.remove(key);
+    // If clearing following posts, trigger a refetch
+    if (key.startsWith('following_posts_')) {
+      final userId = key.substring('following_posts_'.length);
+      // This assumes you have a way to get the controller for this user.
+      // A better approach might be needed depending on your app structure.
+      // For simplicity, this example won't directly trigger refetch here.
+      // The UI refresh action should call clearCache and then potentially
+      // re-listen or trigger a fetch.
+    }
+  }
+
+  // Clear all cache
+  void clearAllCache() {
+    _postsCache.clear();
+    _cacheTimestamps.clear();
   }
 }

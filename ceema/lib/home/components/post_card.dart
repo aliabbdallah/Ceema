@@ -232,7 +232,7 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
                       },
                       child: ProfileImageWidget(
                         imageUrl: widget.post.userAvatar,
-                        radius: 26,
+                        radius: 23,
                         fallbackName: widget.post.userName,
                       ),
                     ),
@@ -481,8 +481,7 @@ class _SeamlessPostCardState extends State<SeamlessPostCard> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder:
-                                (context) => CommentsScreen(post: widget.post),
+                            builder: (context) => PostScreen(post: widget.post),
                           ),
                         );
                       },

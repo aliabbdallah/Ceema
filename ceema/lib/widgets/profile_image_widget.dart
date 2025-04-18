@@ -1,40 +1,43 @@
 import 'package:flutter/material.dart';
 
-class ProfileImageWidget extends StatelessWidget {
+class ProfileImageWidget extends StatefulWidget {
   final String? imageUrl;
   final double radius;
   final String fallbackName;
+  final VoidCallback? onTap;
 
   const ProfileImageWidget({
     Key? key,
     required this.imageUrl,
     this.radius = 100,
     this.fallbackName = '',
+    this.onTap,
   }) : super(key: key);
 
   @override
+  State<ProfileImageWidget> createState() => _ProfileImageWidgetState();
+}
+
+class _ProfileImageWidgetState extends State<ProfileImageWidget> {
+  bool _hasError = false;
+
+  @override
   Widget build(BuildContext context) {
-    // If no image URL, show a placeholder with the first letter of the name
-    if (imageUrl == null || imageUrl!.isEmpty) {
-      return Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: Theme.of(
-              context,
-            ).colorScheme.onPrimaryContainer.withOpacity(0.3),
-            width: 1.5,
-          ),
-        ),
+    // If no image URL or error, show initials
+    if (widget.imageUrl == null || widget.imageUrl!.isEmpty || _hasError) {
+      return GestureDetector(
+        onTap: widget.onTap,
         child: CircleAvatar(
-          radius: radius,
-          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+          radius: widget.radius,
+          backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
           child: Text(
-            fallbackName.isNotEmpty ? fallbackName[0].toUpperCase() : '?',
+            widget.fallbackName.isNotEmpty
+                ? widget.fallbackName[0].toUpperCase()
+                : '?',
             style: TextStyle(
-              fontSize: radius * 0.8,
-              color: Theme.of(context).colorScheme.onPrimaryContainer,
+              fontSize: widget.radius * 0.6,
               fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
         ),
@@ -42,59 +45,48 @@ class ProfileImageWidget extends StatelessWidget {
     }
 
     // Check if the URL is for an asset or a network image
-    if (imageUrl!.startsWith('assets/')) {
-      return Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: Theme.of(
-              context,
-            ).colorScheme.onPrimaryContainer.withOpacity(0.3),
-            width: 1.5,
-          ),
-        ),
+    if (widget.imageUrl!.startsWith('assets/')) {
+      return GestureDetector(
+        onTap: widget.onTap,
         child: CircleAvatar(
-          radius: radius,
-          backgroundImage: AssetImage(imageUrl!),
+          radius: widget.radius,
+          backgroundImage: AssetImage(widget.imageUrl!),
+          onBackgroundImageError: (exception, stackTrace) {
+            setState(() {
+              _hasError = true;
+            });
+          },
         ),
       );
-    } else if (imageUrl!.startsWith('http')) {
-      return Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: Theme.of(
-              context,
-            ).colorScheme.onPrimaryContainer.withOpacity(0.3),
-            width: 1.5,
-          ),
-        ),
+    } else if (widget.imageUrl!.startsWith('http')) {
+      return GestureDetector(
+        onTap: widget.onTap,
         child: CircleAvatar(
-          radius: radius,
-          backgroundImage: NetworkImage(imageUrl!),
+          radius: widget.radius,
+          backgroundImage: NetworkImage(widget.imageUrl!),
           onBackgroundImageError: (exception, stackTrace) {
-            // Silently handle error and show fallback
+            setState(() {
+              _hasError = true;
+            });
           },
         ),
       );
     } else {
-      return Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: Theme.of(
-              context,
-            ).colorScheme.onPrimaryContainer.withOpacity(0.3),
-            width: 1.5,
-          ),
-        ),
+      // If the URL is neither an asset nor a network URL, show initials
+      return GestureDetector(
+        onTap: widget.onTap,
         child: CircleAvatar(
-          radius: radius,
-          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-          child: Icon(
-            Icons.person,
-            size: radius,
-            color: Theme.of(context).colorScheme.onPrimaryContainer,
+          radius: widget.radius,
+          backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+          child: Text(
+            widget.fallbackName.isNotEmpty
+                ? widget.fallbackName[0].toUpperCase()
+                : '?',
+            style: TextStyle(
+              fontSize: widget.radius * 0.6,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
       );

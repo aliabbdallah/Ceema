@@ -153,10 +153,29 @@ class DMService {
 
   // Mark conversation as read
   Future<void> markAsRead(String conversationId) async {
+    final currentUserId = _auth.currentUser?.uid;
+    if (currentUserId == null) return;
+
     try {
+      // Update conversation read status
       await _firestore.collection('conversations').doc(conversationId).update({
         'isUnread': false,
       });
+
+      // Mark all unread messages as read
+      final unreadMessages =
+          await _firestore
+              .collection('messages')
+              .where('conversationId', isEqualTo: conversationId)
+              .where('senderId', isNotEqualTo: currentUserId)
+              .where('isRead', isEqualTo: false)
+              .get();
+
+      final batch = _firestore.batch();
+      for (var doc in unreadMessages.docs) {
+        batch.update(doc.reference, {'isRead': true});
+      }
+      await batch.commit();
     } catch (e) {
       print('Error marking conversation as read: $e');
       rethrow;
@@ -205,5 +224,21 @@ class DMService {
         .map(
           (doc) => Map<String, bool>.from(doc.data()?['typingStatus'] ?? {}),
         );
+  }
+
+  // Get unread message count for a conversation
+  Stream<int> getUnreadMessageCount(String conversationId) {
+    final currentUserId = _auth.currentUser?.uid;
+    if (currentUserId == null) {
+      return Stream.value(0);
+    }
+
+    return _firestore
+        .collection('messages')
+        .where('conversationId', isEqualTo: conversationId)
+        .where('senderId', isNotEqualTo: currentUserId)
+        .where('isRead', isEqualTo: false)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
   }
 }
