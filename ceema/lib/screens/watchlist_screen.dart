@@ -119,7 +119,12 @@ class _WatchlistScreenState extends State<WatchlistScreen>
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return AlertDialog(
-              title: const Text('Filter Watchlist'),
+              title: Text(
+                'Filter Watchlist',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -127,52 +132,97 @@ class _WatchlistScreenState extends State<WatchlistScreen>
                   children: [
                     Text(
                       'Genre',
-                      style: Theme.of(context).textTheme.titleSmall,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     DropdownButton<String>(
                       isExpanded: true,
                       value: tempGenre,
-                      hint: const Text('All Genres'),
+                      hint: Text(
+                        'All Genres',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      dropdownColor: Theme.of(context).colorScheme.surface,
                       onChanged: (value) {
                         setStateDialog(() {
                           tempGenre = value;
                         });
                       },
                       items: [
-                        const DropdownMenuItem<String>(
+                        DropdownMenuItem<String>(
                           value: null,
-                          child: Text('All Genres'),
+                          child: Text(
+                            'All Genres',
+                            style: TextStyle(
+                              color:
+                                  Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
                         ),
                         ..._genres.map((genre) {
                           return DropdownMenuItem<String>(
                             value: genre,
-                            child: Text(genre),
+                            child: Text(
+                              genre,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
                           );
                         }).toList(),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Text('Year', style: Theme.of(context).textTheme.titleSmall),
+                    Text(
+                      'Year',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     DropdownButton<String>(
                       isExpanded: true,
                       value: tempYear,
-                      hint: const Text('All Years'),
+                      hint: Text(
+                        'All Years',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      dropdownColor: Theme.of(context).colorScheme.surface,
                       onChanged: (value) {
                         setStateDialog(() {
                           tempYear = value;
                         });
                       },
                       items: [
-                        const DropdownMenuItem<String>(
+                        DropdownMenuItem<String>(
                           value: null,
-                          child: Text('All Years'),
+                          child: Text(
+                            'All Years',
+                            style: TextStyle(
+                              color:
+                                  Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
                         ),
                         ..._years.map((year) {
                           return DropdownMenuItem<String>(
                             value: year,
-                            child: Text(year),
+                            child: Text(
+                              year,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
                           );
                         }).toList(),
                       ],
@@ -214,12 +264,22 @@ class _WatchlistScreenState extends State<WatchlistScreen>
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return AlertDialog(
-              title: const Text('Sort Watchlist'),
+              title: Text(
+                'Sort Watchlist',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   RadioListTile<String>(
-                    title: const Text('Date Added'),
+                    title: Text(
+                      'Date Added',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
                     value: 'addedAt',
                     groupValue: tempSortBy,
                     onChanged: (value) {
@@ -228,7 +288,12 @@ class _WatchlistScreenState extends State<WatchlistScreen>
                     },
                   ),
                   RadioListTile<String>(
-                    title: const Text('Title'),
+                    title: Text(
+                      'Title',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
                     value: 'title',
                     groupValue: tempSortBy,
                     onChanged: (value) {
@@ -237,7 +302,12 @@ class _WatchlistScreenState extends State<WatchlistScreen>
                     },
                   ),
                   RadioListTile<String>(
-                    title: const Text('Year'),
+                    title: Text(
+                      'Year',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
                     value: 'year',
                     groupValue: tempSortBy,
                     onChanged: (value) {
@@ -249,6 +319,9 @@ class _WatchlistScreenState extends State<WatchlistScreen>
                   SwitchListTile(
                     title: Text(
                       tempSortDescending ? 'Descending' : 'Ascending',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                     ),
                     value: tempSortDescending,
                     onChanged: (value) {
@@ -537,12 +610,13 @@ class _WatchlistScreenState extends State<WatchlistScreen>
                             text: item.movie.title,
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
                             ),
                           ),
                           TextSpan(
                             text: ', ${item.movie.year}',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.secondary,
+                              color: colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -555,7 +629,7 @@ class _WatchlistScreenState extends State<WatchlistScreen>
                       Text(
                         'Dir. ${item.movie.director}',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.white,
+                          color: colorScheme.onSurfaceVariant,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -643,12 +717,16 @@ class _WatchlistScreenState extends State<WatchlistScreen>
                 const SizedBox(height: 16),
                 Text(
                   'Swipe left to delete',
-                  style: Theme.of(context).textTheme.titleLarge,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Try swiping any movie to the left to remove it from your watchlist',
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
@@ -683,20 +761,14 @@ class _WatchlistScreenState extends State<WatchlistScreen>
                 theme.appBarTheme.backgroundColor ?? colorScheme.primary,
             actions: [
               IconButton(
-                icon: const Icon(Icons.filter_alt_outlined),
+                icon: Icon(Icons.filter_alt_outlined),
                 onPressed: _showFilterDialog,
                 tooltip: 'Filter',
-                color:
-                    theme.appBarTheme.actionsIconTheme?.color ??
-                    colorScheme.onPrimary,
               ),
               IconButton(
-                icon: const Icon(Icons.sort_by_alpha_outlined),
+                icon: Icon(Icons.sort_by_alpha_outlined),
                 onPressed: _showSortDialog,
                 tooltip: 'Sort by Date, Title, or Year',
-                color:
-                    theme.appBarTheme.actionsIconTheme?.color ??
-                    colorScheme.onPrimary,
               ),
             ],
           ),
@@ -753,14 +825,16 @@ class _WatchlistScreenState extends State<WatchlistScreen>
             const SizedBox(height: 24),
             Text(
               'Your Watchlist is Empty',
-              style: theme.textTheme.headlineSmall,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: theme.colorScheme.onSurface,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             Text(
               'Tap the bookmark icon on a movie poster or details page to add movies you want to watch later.',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.hintColor,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
               textAlign: TextAlign.center,
             ),

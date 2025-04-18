@@ -370,8 +370,8 @@ class _UserProfileScreenState extends State<UserProfileScreen>
   }
 
   Widget _buildPostList() {
-    return StreamBuilder<List<Post>>(
-      stream: _postService.getUserPosts(widget.userId),
+    return FutureBuilder<List<Post>>(
+      future: _postService.fetchUserPostsOnce(widget.userId),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(child: Text('Error: ${snapshot.error}'));

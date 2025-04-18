@@ -221,17 +221,22 @@ class _WatchedMoviesScreenState extends State<WatchedMoviesScreen> {
   void _showMovieOptions(Movie movie) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.grey[900],
+      backgroundColor: Theme.of(context).bottomSheetTheme.backgroundColor,
       builder:
           (context) => SafeArea(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListTile(
-                  leading: const Icon(Icons.info, color: Colors.white70),
-                  title: const Text(
+                  leading: Icon(
+                    Icons.info,
+                    color: Theme.of(context).iconTheme.color,
+                  ),
+                  title: Text(
                     'View Details',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -244,10 +249,15 @@ class _WatchedMoviesScreenState extends State<WatchedMoviesScreen> {
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.edit, color: Colors.white70),
-                  title: const Text(
+                  leading: Icon(
+                    Icons.edit,
+                    color: Theme.of(context).iconTheme.color,
+                  ),
+                  title: Text(
                     'Edit Rating',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -255,10 +265,15 @@ class _WatchedMoviesScreenState extends State<WatchedMoviesScreen> {
                   },
                 ),
                 ListTile(
-                  leading: const Icon(Icons.delete, color: Colors.white70),
-                  title: const Text(
+                  leading: Icon(
+                    Icons.delete,
+                    color: Theme.of(context).iconTheme.color,
+                  ),
+                  title: Text(
                     'Remove from Watched',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -276,15 +291,22 @@ class _WatchedMoviesScreenState extends State<WatchedMoviesScreen> {
       context: context,
       builder:
           (context) => AlertDialog(
-            backgroundColor: Colors.grey[900],
-            title: const Text('Sort by', style: TextStyle(color: Colors.white)),
+            backgroundColor: Theme.of(context).dialogBackgroundColor,
+            title: Text(
+              'Sort by',
+              style: TextStyle(
+                color: Theme.of(context).textTheme.titleLarge?.color,
+              ),
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 RadioListTile(
-                  title: const Text(
+                  title: Text(
                     'Recently Watched',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
                   ),
                   value: 'watchedAt',
                   groupValue: _sortBy,
@@ -298,9 +320,11 @@ class _WatchedMoviesScreenState extends State<WatchedMoviesScreen> {
                   },
                 ),
                 RadioListTile(
-                  title: const Text(
+                  title: Text(
                     'Title',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
                   ),
                   value: 'title',
                   groupValue: _sortBy,
@@ -314,9 +338,11 @@ class _WatchedMoviesScreenState extends State<WatchedMoviesScreen> {
                   },
                 ),
                 RadioListTile(
-                  title: const Text(
+                  title: Text(
                     'Year',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
                   ),
                   value: 'year',
                   groupValue: _sortBy,
@@ -330,9 +356,11 @@ class _WatchedMoviesScreenState extends State<WatchedMoviesScreen> {
                   },
                 ),
                 RadioListTile(
-                  title: const Text(
+                  title: Text(
                     'Rating',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                    ),
                   ),
                   value: 'rating',
                   groupValue: _sortBy,
@@ -354,18 +382,18 @@ class _WatchedMoviesScreenState extends State<WatchedMoviesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         elevation: 0,
         title: Text(
           widget.isCurrentUser ? 'My Watched Movies' : 'Watched Movies',
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: Theme.of(context).textTheme.titleLarge?.color,
             fontWeight: FontWeight.bold,
           ),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: Theme.of(context).iconTheme.color),
         actions: [
           IconButton(
             icon: const Icon(Icons.sort_by_alpha),
@@ -382,18 +410,34 @@ class _WatchedMoviesScreenState extends State<WatchedMoviesScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.movie, size: 64, color: Colors.grey[400]),
+                    Icon(
+                      Icons.movie,
+                      size: 64,
+                      color: Theme.of(
+                        context,
+                      ).textTheme.bodyLarge?.color?.withOpacity(0.4),
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       'No watched movies yet',
-                      style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Theme.of(
+                          context,
+                        ).textTheme.bodyLarge?.color?.withOpacity(0.6),
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       widget.isCurrentUser
                           ? 'Start rating movies to see them here'
                           : 'This user hasn\'t watched any movies yet',
-                      style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Theme.of(
+                          context,
+                        ).textTheme.bodyLarge?.color?.withOpacity(0.5),
+                      ),
                     ),
                   ],
                 ),

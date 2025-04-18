@@ -54,31 +54,31 @@ class ThemeService extends ChangeNotifier {
       brightness: Brightness.light,
       fontFamily: GoogleFonts.poppins().fontFamily,
 
-      // Color Scheme - Updated for better cohesion with dark theme
+      // Color Scheme - Updated for better cohesion
       colorScheme: ColorScheme.light(
         surface: const Color(0xFFF0F2F5), // Slightly softer background
         surfaceContainerHighest: const Color(
           0xFFE4E6EB,
         ), // Deeper container color
-        primary: const Color(0xFF7F39FB), // Softened purple
-        secondary: const Color(0xFF4ECDC4), // More vibrant teal
+        primary: const Color(0xFF3A7BFD), // Blue primary - complements orange
+        secondary: const Color(0xFFFF8C42), // Original vibrant orange
         onSurface: const Color(0xFF1C1C1E), // Softer black for text
-        onSurfaceVariant: const Color(0xFF2C2C2E), // Secondary text color
+        onSurfaceVariant: const Color(
+          0xFF6E6E70,
+        ), // Secondary text color (lightened)
         onPrimary: Colors.white,
         onSecondary: Colors.black,
         error: Colors.red[700]!,
-        primaryContainer: const Color(
-          0xFFEDE0FF,
-        ), // Light purple for containers
+        primaryContainer: const Color(0xFFDCEAFF), // Light blue for containers
         onPrimaryContainer: const Color(
-          0xFF4B0BA8,
-        ), // Dark purple for text on containers
+          0xFF0A438C,
+        ), // Dark blue for text on containers
         secondaryContainer: const Color(
-          0xFFDCF8F6,
-        ), // Light teal for containers
+          0xFFFFEEE4,
+        ), // Light orange for containers
         onSecondaryContainer: const Color(
-          0xFF044A45,
-        ), // Dark teal for text on containers
+          0xFF9C4A15,
+        ), // Dark orange for text on containers
       ),
 
       // Scaffold and Background
@@ -116,8 +116,8 @@ class ThemeService extends ChangeNotifier {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(
-            color: Color(0xFF7F39FB),
-          ), // Match primary
+            color: Color(0xFF3A7BFD), // Match primary
+          ),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -176,26 +176,26 @@ class ThemeService extends ChangeNotifier {
         bodyLarge: GoogleFonts.poppins(
           fontSize: 16,
           fontWeight: FontWeight.w400,
-          color: const Color(0xFF2C2C2E), // Match onSurfaceVariant
+          color: const Color(0xFF6E6E70), // Match onSurfaceVariant
         ),
         bodyMedium: GoogleFonts.poppins(
           fontSize: 14,
           fontWeight: FontWeight.w400,
-          color: const Color(0xFF2C2C2E), // Match onSurfaceVariant
+          color: const Color(0xFF6E6E70), // Match onSurfaceVariant
         ),
 
         // Captions/Small Text: Light/Regular (300-400 weight)
         bodySmall: GoogleFonts.poppins(
           fontSize: 12,
           fontWeight: FontWeight.w300,
-          color: const Color(0xFF2C2C2E), // Match onSurfaceVariant
+          color: const Color(0xFF6E6E70), // Match onSurfaceVariant
         ),
       ),
 
       // Button Themes
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF7F39FB), // Match primary
+          backgroundColor: const Color(0xFF3A7BFD), // Match primary
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -211,7 +211,7 @@ class ThemeService extends ChangeNotifier {
 
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: const Color(0xFF7F39FB), // Match primary
+          foregroundColor: const Color(0xFF3A7BFD), // Match primary
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           textStyle: GoogleFonts.poppins(
             fontSize: 14,
@@ -222,7 +222,7 @@ class ThemeService extends ChangeNotifier {
 
       // Icon Theme
       iconTheme: const IconThemeData(
-        color: Color(0xFF2C2C2E),
+        color: Color(0xFF6E6E70),
         size: 24,
       ), // Match onSurfaceVariant
       // Bottom Navigation
@@ -230,7 +230,7 @@ class ThemeService extends ChangeNotifier {
         backgroundColor: const Color(
           0xFFE4E6EB,
         ), // Match surfaceContainerHighest
-        indicatorColor: const Color(0xFF7F39FB), // Match primary
+        indicatorColor: const Color(0xFF3A7BFD), // Match primary
         labelTextStyle: MaterialStatePropertyAll(
           GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w500),
         ),
@@ -243,7 +243,7 @@ class ThemeService extends ChangeNotifier {
         backgroundColor: const Color(
           0xFFE4E6EB,
         ), // Match surfaceContainerHighest
-        selectedColor: const Color(0xFF7F39FB), // Match primary
+        selectedColor: const Color(0xFF3A7BFD), // Match primary
         disabledColor: Colors.grey[300],
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         labelStyle: GoogleFonts.poppins(
@@ -264,12 +264,12 @@ class ThemeService extends ChangeNotifier {
 
       // Progress Indicator Theme
       progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: Color(0xFF7F39FB), // Match primary
+        color: Color(0xFF3A7BFD), // Match primary
       ),
 
       // Floating Action Button Theme
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: const Color(0xFF7F39FB), // Match primary
+        backgroundColor: const Color(0xFF3A7BFD), // Match primary
         foregroundColor: Colors.white,
         elevation: 2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

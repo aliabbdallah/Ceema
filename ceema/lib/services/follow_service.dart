@@ -74,55 +74,95 @@ class FollowService {
 
   // Get following with profile images and latest names
   Stream<List<Follow>> getFollowing(String userId) {
+    print('[FollowService] getFollowing called for userId: $userId');
     Query query = _firestore
         .collection('follows')
         .where('followerId', isEqualTo: userId)
         .orderBy('createdAt', descending: true);
 
-    return query.snapshots().asyncMap((snapshot) async {
-      final follows = <Follow>[];
-      for (final doc in snapshot.docs) {
-        final followData = doc.data() as Map<String, dynamic>;
-        final followedId = followData['followedId'];
+    // Use a single asyncMap for better efficiency and error handling
+    return query
+        .snapshots()
+        .asyncMap((snapshot) async {
+          print(
+            '[FollowService] Received snapshot with ${snapshot.docs.length} follow docs for userId: $userId',
+          );
 
-        // Fetch latest avatar and name
-        final followedProfileImageUrl = await _getUserProfileImageUrl(
-          followedId,
-        );
-        // Pass the potentially outdated name as a fallback
-        final followedName = await _getUserName(
-          followedId,
-          followData['followedName'] ?? 'User',
-        );
+          if (snapshot.docs.isEmpty) {
+            print(
+              '[FollowService] Snapshot is empty, emitting empty list for userId: $userId',
+            );
+            return <Follow>[];
+          }
 
-        // Create Follow object with updated avatar and name
-        follows.add(
-          Follow.fromJson(followData, doc.id).copyWith(
-            followedAvatar: followedProfileImageUrl, // Update with fetched URL
-            followedName: followedName, // Update with fetched name
-          ),
-        );
-      }
-      return follows;
-    });
+          print(
+            '[FollowService] Processing ${snapshot.docs.length} follow docs for userId: $userId',
+          );
+          try {
+            // Process documents concurrently using Future.wait
+            final follows = await Future.wait(
+              snapshot.docs.map((doc) async {
+                final followData = doc.data() as Map<String, dynamic>;
+                final followedId = followData['followedId'] as String?;
+
+                if (followedId == null) {
+                  print(
+                    '[FollowService] Warning: Follow doc ${doc.id} missing followedId.',
+                  );
+                  // Decide how to handle this - skip or return a placeholder?
+                  // Returning null here to filter out later, or throw an error
+                  return null;
+                }
+
+                // Fetch latest avatar and name
+                final followedProfileImageUrl = await _getUserProfileImageUrl(
+                  followedId,
+                );
+                final followedName = await _getUserName(
+                  followedId,
+                  followData['followedName'] as String? ??
+                      'User', // Handle potential null
+                );
+
+                // Create Follow object with updated avatar and name
+                return Follow.fromJson(followData, doc.id).copyWith(
+                  followedAvatar: followedProfileImageUrl,
+                  followedName: followedName,
+                );
+              }).toList(),
+            );
+
+            // Filter out any nulls resulting from processing errors (like missing followedId)
+            final validFollows = follows.whereType<Follow>().toList();
+
+            print(
+              '[FollowService] Emitting ${validFollows.length} valid Follow objects for userId: $userId',
+            );
+            return validFollows;
+          } catch (e, stackTrace) {
+            print(
+              '[FollowService] Error processing snapshot for userId: $userId - $e\n$stackTrace',
+            );
+            // Rethrow or return empty list depending on desired behavior on error
+            return <Follow>[]; // Return empty list on processing error
+          }
+        })
+        .handleError((error) {
+          // Handle errors specifically from the snapshots() stream itself
+          print(
+            '[FollowService] Error in snapshots() stream for userId: $userId - $error',
+          );
+          return <Follow>[]; // Return empty list on stream error
+        });
   }
 
-  // Cache for follow relationships
-  final Map<String, bool> _followRelationshipCache = {};
-
-  // Check if following with caching
+  // Check if following WITHOUT caching
   Future<bool> isFollowing(String targetId) async {
     try {
       final currentUser = _auth.currentUser;
       if (currentUser == null) return false;
 
-      // Check cache first
-      final cacheKey = '${currentUser.uid}_$targetId';
-      if (_followRelationshipCache.containsKey(cacheKey)) {
-        return _followRelationshipCache[cacheKey]!;
-      }
-
-      // Query Firestore if not in cache
+      // Query Firestore directly
       final followQuery =
           await _firestore
               .collection('follows')
@@ -132,8 +172,6 @@ class FollowService {
               .get();
 
       final isFollowing = followQuery.docs.isNotEmpty;
-      // Update cache
-      _followRelationshipCache[cacheKey] = isFollowing;
 
       return isFollowing;
     } catch (e) {
@@ -142,17 +180,31 @@ class FollowService {
     }
   }
 
-  // Clear cache for a specific relationship
-  void clearFollowCache(String targetId) {
-    final currentUser = _auth.currentUser;
-    if (currentUser != null) {
-      _followRelationshipCache.remove('${currentUser.uid}_$targetId');
+  // Get a list of IDs the user is following (one-time fetch)
+  Future<List<String>> getFollowingIdsOnce(String userId) async {
+    print('[FollowService] getFollowingIdsOnce called for userId: $userId');
+    try {
+      final querySnapshot =
+          await _firestore
+              .collection('follows')
+              .where('followerId', isEqualTo: userId)
+              .get();
+      // Explicitly map to String? and then filter non-nulls
+      final ids =
+          querySnapshot.docs
+              .map((doc) => doc.data()['followedId'] as String?)
+              .whereType<String>() // Filter out nulls and ensure type is String
+              .toList();
+      print(
+        '[FollowService] getFollowingIdsOnce found ${ids.length} IDs for userId: $userId',
+      );
+      return ids;
+    } catch (e) {
+      print(
+        '[FollowService] Error in getFollowingIdsOnce for userId: $userId - $e',
+      );
+      return []; // Return empty list on error
     }
-  }
-
-  // Clear entire cache
-  void clearAllFollowCache() {
-    _followRelationshipCache.clear();
   }
 
   // Follow a user
@@ -160,9 +212,6 @@ class FollowService {
     try {
       final currentUser = _auth.currentUser;
       if (currentUser == null) return;
-
-      // Clear relationship cache before making changes
-      clearFollowCache(targetId);
 
       // Prevent users from following themselves
       if (currentUser.uid == targetId) {
@@ -230,9 +279,6 @@ class FollowService {
     try {
       final currentUser = _auth.currentUser;
       if (currentUser == null) return;
-
-      // Clear relationship cache
-      clearFollowCache(targetId);
 
       // Find and delete follow relationship
       final followQuery =

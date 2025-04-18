@@ -15,13 +15,6 @@ class PostService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final ProfileService _profileService = ProfileService();
 
-  // Cache for posts
-  final Map<String, List<Post>> _postsCache = {};
-  final Map<String, DateTime> _cacheTimestamps = {};
-  // Use different expiration for general and following posts
-  static const Duration _generalCacheExpiration = Duration(minutes: 5);
-  static const Duration _followingCacheExpiration = Duration(minutes: 10);
-
   Future<void> createPost({
     required String userId,
     required String userName,
@@ -48,155 +41,208 @@ class PostService {
     });
   }
 
-  // Get all posts with user data
-  Stream<List<Post>> getPosts() {
-    return _firestore
-        .collection('posts')
-        .orderBy('createdAt', descending: true)
-        .limit(50) // Limit to most recent 50 posts for better performance
-        .snapshots()
-        .asyncMap((snapshot) async {
-          // Directly fetch and process posts without checking cache
-          final posts = await Future.wait(
-            snapshot.docs.map((doc) async {
-              final postData = doc.data();
-              final userData = await _getUserData(postData['userId']);
+  // Fetch all posts (one-time)
+  Future<List<Post>> fetchPostsOnce({int limit = 50}) async {
+    print('[PostService] fetchPostsOnce called');
+    try {
+      final querySnapshot =
+          await _firestore
+              .collection('posts')
+              .orderBy('createdAt', descending: true)
+              .limit(limit)
+              .get();
 
-              return Post.fromJson({
-                ...postData,
-                'username': userData['username'] ?? postData['userName'],
-                'displayName':
-                    userData['displayName'] ??
-                    userData['username'] ??
-                    postData['userName'],
-                'profileImageUrl':
-                    userData['profileImageUrl'] ?? postData['userAvatar'],
-              }, doc.id);
-            }),
-          );
+      print(
+        '[PostService] fetchPostsOnce: Fetched ${querySnapshot.docs.length} post docs.',
+      );
 
-          // Sort by creation time
-          posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      // Fetch user data for these posts
+      final posts = await _processPostSnapshot(querySnapshot);
 
-          // Return fresh posts directly
-          return posts;
-        });
-  }
+      // Sort by creation time (redundant if query ordered, but safe)
+      posts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-  // Get posts for a specific user
-  Stream<List<Post>> getUserPosts(String userId) {
-    return _firestore
-        .collection('posts')
-        .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .asyncMap((snapshot) async {
-          final cacheKey = 'user_posts_$userId';
-          final now = DateTime.now();
-
-          // Check cache first
-          if (_postsCache.containsKey(cacheKey) &&
-              _cacheTimestamps.containsKey(cacheKey) &&
-              now.difference(_cacheTimestamps[cacheKey]!) <
-                  _generalCacheExpiration) {
-            // Use general expiration
-            return _postsCache[cacheKey]!;
-          }
-
-          final userData = await _getUserData(userId);
-          final posts =
-              snapshot.docs.map((doc) {
-                final postData = doc.data();
-                return Post.fromJson({
-                  ...postData,
-                  'username': userData['username'] ?? postData['userName'],
-                  'displayName':
-                      userData['displayName'] ??
-                      userData['username'] ??
-                      postData['userName'],
-                  'profileImageUrl':
-                      userData['profileImageUrl'] ?? postData['userAvatar'],
-                }, doc.id);
-              }).toList();
-
-          // Update cache
-          _postsCache[cacheKey] = posts;
-          _cacheTimestamps[cacheKey] = now;
-
-          return posts;
-        });
-  }
-
-  Stream<List<Post>> getFollowingPosts(String userId) async* {
-    final cacheKey = 'following_posts_$userId';
-    final now = DateTime.now();
-
-    // Check cache first
-    if (_postsCache.containsKey(cacheKey) &&
-        _cacheTimestamps.containsKey(cacheKey) &&
-        now.difference(_cacheTimestamps[cacheKey]!) <
-            _followingCacheExpiration) {
-      // Use following-specific expiration
-      yield _postsCache[cacheKey]!;
-      return; // Return cached data and exit
+      print('[PostService] fetchPostsOnce: Returning ${posts.length} posts.');
+      return posts;
+    } catch (e, stackTrace) {
+      print('[PostService] Error in fetchPostsOnce: $e\n$stackTrace');
+      return []; // Return empty list on error
     }
+  }
+
+  // Fetch posts for a specific user (one-time)
+  Future<List<Post>> fetchUserPostsOnce(String userId) async {
+    print('[PostService] fetchUserPostsOnce called for user: $userId');
+    try {
+      final querySnapshot =
+          await _firestore
+              .collection('posts')
+              .where('userId', isEqualTo: userId)
+              .orderBy('createdAt', descending: true)
+              .get();
+      print(
+        '[PostService] fetchUserPostsOnce: Fetched ${querySnapshot.docs.length} post docs for user $userId.',
+      );
+      final posts = await _processPostSnapshot(querySnapshot);
+      print(
+        '[PostService] fetchUserPostsOnce: Returning ${posts.length} posts for user $userId.',
+      );
+      return posts;
+    } catch (e, stackTrace) {
+      print(
+        '[PostService] Error in fetchUserPostsOnce for $userId: $e\n$stackTrace',
+      );
+      return [];
+    }
+  }
+
+  // Fetch posts from followed users (one-time)
+  Future<List<Post>> fetchFollowingPostsOnce(
+    String userId, {
+    int limit = 50,
+  }) async {
+    final startTime = DateTime.now();
+    print('[PostService] fetchFollowingPostsOnce called for user: $userId ===');
 
     try {
-      // Get list of users that the current user follows
-      final following = await _followService.getFollowing(userId).first;
-      final followingIds =
-          following.map((follow) => follow.followedId).toList();
+      print(
+        '[PostService] fetchFollowingPostsOnce: Fetching following users...',
+      );
+      // Use the new one-time fetch method from FollowService
+      final followingIds = await _followService.getFollowingIdsOnce(userId);
+      print(
+        '[PostService] fetchFollowingPostsOnce: Found ${followingIds.length} followed users.',
+      );
 
       if (followingIds.isEmpty) {
-        _postsCache[cacheKey] = []; // Cache empty list
-        _cacheTimestamps[cacheKey] = now;
-        yield [];
-        return;
-      }
-
-      // Fetch posts in chunks due to Firestore 'whereIn' limit
-      List<Post> allPosts = [];
-      for (var i = 0; i < followingIds.length; i += 10) {
-        final chunk = followingIds.skip(i).take(10).toList();
-        final querySnapshot =
-            await _firestore
-                .collection('posts')
-                .where('userId', whereIn: chunk)
-                // No need to order here, we'll sort the combined list later
-                .get();
-
-        // Fetch user data for authors in this chunk concurrently
-        final postsFromChunk = await Future.wait(
-          querySnapshot.docs.map((doc) async {
-            final postData = doc.data();
-            final userData = await _getUserData(postData['userId']);
-            return Post.fromJson({
-              ...postData,
-              'username': userData['username'] ?? postData['userName'],
-              'displayName':
-                  userData['displayName'] ??
-                  userData['username'] ??
-                  postData['userName'],
-              'profileImageUrl':
-                  userData['profileImageUrl'] ?? postData['userAvatar'],
-            }, doc.id);
-          }),
+        print(
+          '[PostService] fetchFollowingPostsOnce: No followed users found, returning empty list',
         );
-        allPosts.addAll(postsFromChunk);
+        return [];
       }
 
-      // Sort the combined list by creation time
+      // Firestore 'whereIn' query limit is 30 for `.get()` as well.
+      // Chunking is necessary if following > 30.
+      List<Post> allPosts = [];
+      final chunkSize = 30;
+      List<Future<QuerySnapshot<Map<String, dynamic>>>> futures = [];
+
+      for (var i = 0; i < followingIds.length; i += chunkSize) {
+        final chunk = followingIds.skip(i).take(chunkSize).toList();
+        print(
+          '[PostService] fetchFollowingPostsOnce: Querying posts chunk ${i ~/ chunkSize + 1} for ${chunk.length} users.',
+        );
+        futures.add(
+          _firestore
+              .collection('posts')
+              .where('userId', whereIn: chunk)
+              .orderBy('createdAt', descending: true)
+              // Limit each chunk query? Might miss recent posts if a user has many.
+              // Or apply overall limit after merging?
+              // Let's apply limit at the end for simplicity for now.
+              // .limit(limit) // Consider implications
+              .get(),
+        );
+      }
+
+      // Wait for all chunk queries to complete
+      final snapshots = await Future.wait(futures);
+      print('[PostService] fetchFollowingPostsOnce: All post chunks fetched.');
+
+      // Process all snapshots
+      List<QuerySnapshot<Map<String, dynamic>>> allQuerySnapshots =
+          snapshots.expand((snap) => [snap]).toList();
+      // Flatten documents and process them
+      final combinedSnapshotDocs =
+          allQuerySnapshots.expand((snap) => snap.docs).toList();
+      final combinedQuerySnapshot = _docsToSnapshot(combinedSnapshotDocs);
+
+      allPosts = await _processPostSnapshot(combinedQuerySnapshot);
+
+      // Sort ALL fetched posts and apply the final limit
+      print(
+        '[PostService] fetchFollowingPostsOnce: Sorting ${allPosts.length} total posts...',
+      );
       allPosts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      if (allPosts.length > limit) {
+        allPosts = allPosts.sublist(0, limit);
+      }
 
-      // Update cache
-      _postsCache[cacheKey] = allPosts;
-      _cacheTimestamps[cacheKey] = now;
-
-      yield allPosts; // Yield the complete, sorted list
-    } catch (e) {
-      print('Error getting following posts: $e');
-      yield []; // Yield empty list on error
+      final totalTime = DateTime.now().difference(startTime).inMilliseconds;
+      print(
+        '[PostService] fetchFollowingPostsOnce: Completed in ${totalTime}ms. Returning ${allPosts.length} posts.',
+      );
+      return allPosts;
+    } catch (e, stackTrace) {
+      print('[PostService] Error in fetchFollowingPostsOnce: $e\n$stackTrace');
+      return [];
     }
+  }
+
+  // Helper to convert List<QueryDocumentSnapshot> to QuerySnapshot mock
+  // (Needed because _processPostSnapshot expects QuerySnapshot)
+  QuerySnapshot<Map<String, dynamic>> _docsToSnapshot(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    // This is a bit of a hack. We create a mock QuerySnapshot.
+    // A better approach might be to refactor _processPostSnapshot to accept List<QueryDocumentSnapshot>
+    return _MockQuerySnapshot(docs);
+  }
+
+  // Helper method to process a QuerySnapshot and fetch user data
+  Future<List<Post>> _processPostSnapshot(
+    QuerySnapshot<Map<String, dynamic>> postsSnapshot,
+  ) async {
+    print(
+      '[PostService] _processPostSnapshot processing ${postsSnapshot.docs.length} docs.',
+    );
+    if (postsSnapshot.docs.isEmpty) return [];
+
+    final userIdsInSnapshot =
+        postsSnapshot.docs
+            .map((doc) => doc.data()['userId'] as String?)
+            .where((id) => id != null)
+            .toSet();
+
+    print(
+      '[PostService] _processPostSnapshot: Fetching user data for ${userIdsInSnapshot.length} unique users.',
+    );
+    Map<String, Map<String, dynamic>> usersDataMap = {};
+    try {
+      await Future.wait(
+        userIdsInSnapshot.map((id) async {
+          usersDataMap[id!] = await _getUserData(id);
+        }),
+      );
+      print('[PostService] _processPostSnapshot: User data fetched.');
+    } catch (e) {
+      print(
+        '[PostService] _processPostSnapshot: Error fetching user data - $e',
+      );
+      // Continue without user data
+    }
+
+    final posts =
+        postsSnapshot.docs.map((doc) {
+          final postData = doc.data();
+          final postUserId = postData['userId'] as String?;
+          final userData = usersDataMap[postUserId] ?? {};
+
+          return Post.fromJson({
+            ...postData,
+            'username': userData['username'] ?? postData['userName'],
+            'displayName':
+                userData['displayName'] ??
+                userData['username'] ??
+                postData['userName'],
+            'profileImageUrl':
+                userData['profileImageUrl'] ?? postData['userAvatar'],
+          }, doc.id);
+        }).toList();
+    print(
+      '[PostService] _processPostSnapshot returning ${posts.length} processed posts.',
+    );
+    return posts;
   }
 
   // Toggle like on a post
@@ -550,35 +596,32 @@ class PostService {
         .map((snapshot) => snapshot.docs.length);
   }
 
-  // Fetch user data with caching
+  // Fetch user data (Removed caching - relies on ProfileService caching if any)
   Future<Map<String, dynamic>> _getUserData(String userId) async {
+    // REMOVED caching logic here - ProfileService is now responsible
     try {
       final userModel = await _profileService.getUserProfile(userId);
       return userModel.toJson();
     } catch (e) {
-      print('Error getting user data: $e');
-      return {};
+      print('Error getting user data for $userId: $e');
+      return {}; // Return empty map on error
     }
   }
+}
 
-  // Clear cache for a specific key (used for manual refresh)
-  void clearCache(String key) {
-    _postsCache.remove(key);
-    _cacheTimestamps.remove(key);
-    // If clearing following posts, trigger a refetch
-    if (key.startsWith('following_posts_')) {
-      final userId = key.substring('following_posts_'.length);
-      // This assumes you have a way to get the controller for this user.
-      // A better approach might be needed depending on your app structure.
-      // For simplicity, this example won't directly trigger refetch here.
-      // The UI refresh action should call clearCache and then potentially
-      // re-listen or trigger a fetch.
-    }
-  }
+// Mock class to satisfy _processPostSnapshot signature after chunking
+class _MockQuerySnapshot<T extends Object?> implements QuerySnapshot<T> {
+  @override
+  final List<QueryDocumentSnapshot<T>> docs;
 
-  // Clear all cache
-  void clearAllCache() {
-    _postsCache.clear();
-    _cacheTimestamps.clear();
-  }
+  _MockQuerySnapshot(this.docs);
+
+  @override
+  List<DocumentChange<T>> get docChanges => throw UnimplementedError();
+
+  @override
+  SnapshotMetadata get metadata => throw UnimplementedError();
+
+  @override
+  int get size => docs.length;
 }
