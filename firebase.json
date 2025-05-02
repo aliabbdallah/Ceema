@@ -1,0 +1,54 @@
+{
+  "flutter": {
+    "platforms": {
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "ceema-faiz",
+          "configurations": {
+            "android": "1:386771880792:android:60aa950e29003c0ffa732d",
+            "ios": "1:386771880792:ios:406573273af904cefa732d",
+            "macos": "1:386771880792:ios:406573273af904cefa732d",
+            "web": "1:386771880792:web:a34592add2c0e8bdfa732d",
+            "windows": "1:386771880792:web:e6693c6dc3e441eafa732d"
+          }
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "ceema-faiz",
+          "appId": "1:386771880792:ios:406573273af904cefa732d",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "android": {
+        "default": {
+          "projectId": "ceema-faiz",
+          "appId": "1:386771880792:android:60aa950e29003c0ffa732d",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "ceema-faiz",
+          "appId": "1:386771880792:ios:406573273af904cefa732d",
+          "uploadDebugSymbols": false,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ]
+}
